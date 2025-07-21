@@ -395,6 +395,8 @@ const createFolder = async (req, res) => {
     }
 
     const department = user.department;
+    console.log(department);
+    
     const ftpConfig = ftpCredentials[department];
     if (!ftpConfig) {
       return res.status(404).json({ error: "Department not configured." });

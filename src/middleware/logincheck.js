@@ -6,8 +6,6 @@ const requireAuth = (req, res, next) => {
   // User is authenticated, proceed to the next middleware
   next();
 };
-
-
 module.exports = {
   requireAuth,
 }

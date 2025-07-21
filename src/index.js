@@ -26,11 +26,12 @@ app.set("view engine", "ejs");
 
 app.use('/pdfjs', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
 
+
 //initialize routes
 initRoutes(app);
 //DB connection
 
-let port = 3000;
+let port = process.env.PORT || 3030;
 app.listen(port, () => {
   console.log(`Running at http://dms.local.bil:${port}`);
 });

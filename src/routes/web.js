@@ -8,10 +8,9 @@ const homeController = require("../controllers/home");
 const uploadController = require("../controllers/upload");
 const shareController  = require("../controllers/shareController");
 const searchController = require("../controllers/searchController");
-const APIController = require("../controllers/api/API");
-const AuthController = require("../controllers/api/Auth");
 const CommitteeController = require("../controllers/Committe");
 const loginController = require("../controllers/login");
+const verifyTokenController = require("../controllers/api/verifyToken")
 
 router.use(express.json())
 router.use(session({
@@ -48,8 +47,8 @@ let routes = app => {
   router.get("/DeepSearch", requireAuth, searchController.showSearchPage);
 
   // API Autjentication
-  router.post('/api/v1/login', APIController.authLogin);
-  router.get("/password", AuthController.GetAuth )
+  // router.post('/api/v1/login', APIController.authLogin);
+  router.get('/', verifyTokenController.verifyToken )
   router.get("/logout",loginController.logout); 
   
   //add Committees

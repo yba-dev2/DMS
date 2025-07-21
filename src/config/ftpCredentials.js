@@ -26,12 +26,7 @@ const ftpCredentials = {
       host: process.env.FTP_HOST_CREDIT,
       user: process.env.FTP_USER_CREDIT,
       password: process.env.FTP_PASSWORD_CREDIT,
-    },
-    Compliance: {
-      host: process.env.FTP_HOST_COMPLIANCE,
-      user: process.env.FTP_USER_COMPLIANCE,
-      password: process.env.FTP_PASSWORD_COMPLIANCE,
-    },
+    }
   },
   qnap3: {
     Management: {
@@ -43,6 +38,11 @@ const ftpCredentials = {
       host: process.env.FTP_HOST_AUDIT,
       user: process.env.FTP_USER_AUDIT,
       password: process.env.FTP_PASSWORD_AUDIT,
+    },
+    Compliance: {
+      host: process.env.FTP_HOST_COMPLIANCE,
+      user: process.env.FTP_USER_COMPLIANCE,
+      password: process.env.FTP_PASSWORD_COMPLIANCE,
     },
   },
   qnap4: {
