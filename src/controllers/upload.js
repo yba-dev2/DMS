@@ -201,11 +201,11 @@ const multipleUpload = async (req, res) => {
 
     if (error.code === "LIMIT_UNEXPECTED_FILE") {
       req.flash("error", "Too many files to upload.");
-      return res.status(400).redirect(req.headers.referer || "/checking");
+      return res.status(400).redirect(req.headers.referer || "/FolderList");
     }
 
     req.flash("error", error.message || "Error when trying to upload files.");
-    return res.status(500).redirect(req.headers.referer || "/checking");
+    return res.status(500).redirect(req.headers.referer || "/FolderList");
   }
 };
 

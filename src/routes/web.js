@@ -32,7 +32,7 @@ let routes = app => {
   router.get('/folder/:folderId',requireAuth, uploadController.getFolderContents)
   // router.get('/files/:fileId',requireAuth, uploadController.getFileFromQNAP)
   router.post('/create-folder',requireAuth, uploadController.createFolder)
-  router.get("/checking", requireAuth, uploadController.checkFolder)
+  router.get("/FolderList", requireAuth, uploadController.checkFolder)
   router.get("/testcheck/:id", requireAuth, uploadController.testCheck);
   router.get("/view/:fileId", requireAuth, uploadController.viewFileFromQNAP);
 

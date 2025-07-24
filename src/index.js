@@ -6,6 +6,7 @@ const helmet = require("helmet")
 const rateLimit = require('express-rate-limit');
 const compression = require("compression")
 const morgan = require("morgan")
+const session = require('express-session');
 app.use(cookieParser());
 const initRoutes = require("./routes/web");
 
@@ -14,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 //middleware for rate-limiting
-app.use(rateLimit({ windowMs: 12 * 60 * 1000, max: 100 }));
+// app.use(rateLimit({ windowMs: 12 * 60 * 1000, max: 100 }));
 
 app.use(compression());
 app.use(morgan("dev"));
@@ -25,13 +26,23 @@ app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
 app.use('/pdfjs', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
+app.set('trust proxy', true);
 
-
+app.use(session({
+  secret: process.env.SECRET,
+  resave: false,
+  saveUninitialized: false, // better for security
+  cookie: {
+    secure: true, // set true if behind HTTPS (in production)
+    httpOnly: true,
+    maxAge: 60 * 60 * 1000 // 1 hour
+  }
+}));
 //initialize routes
 initRoutes(app);
 //DB connection
 
-let port = process.env.PORT || 3030;
+let port = process.env.PORT;
 app.listen(port, () => {
-  console.log(`Running at http://dms.local.bil:${port}`);
+  console.log(`Running at https://dms.bil.local:${port}`);
 });

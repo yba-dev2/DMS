@@ -3,7 +3,8 @@ const User = require('../../model/users');
 
 const verifyToken = async (req, res) => {
   const token = req.query.token; // Or get from headers if needed
-
+  console.log(process.env.JWT_SECRET);
+  console.log(token);
   if (!token) {
     return res.status(400).json({
       error: 'Missing token in query',
@@ -14,7 +15,7 @@ const verifyToken = async (req, res) => {
   try {
     // Verify the token from ERP
     const decoded = jwt.verify(token, process.env.JWT_SECRET); // Use public key if RS256
-
+	
     const employeeId = decoded.employee_id || decoded.employeeId;
     if (!employeeId) {
       return res.status(400).json({ error: 'Missing employeeId in token' });
@@ -41,7 +42,7 @@ const verifyToken = async (req, res) => {
     // Save the original ERP token in cookie (not a new one)
     res.cookie('erp_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
       sameSite: 'lax',
       maxAge: 60 * 60 * 1000, // 1 hour
     });

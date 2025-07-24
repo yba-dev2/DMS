@@ -72,7 +72,7 @@ const shareFilesFolder = async (req, res) => {
     shareToAll,
   } = req.body;
 
-  const backTo = redirectUrl || "/checking";
+  const backTo = redirectUrl || "/FolderList";
   const sharerId = req.session.userId;
 
   try {
@@ -231,7 +231,7 @@ const removeSharedFolder = async (req, res) => {
     stopShareToAll,
     redirectUrl,
   } = req.body;
-  const backTo = decodeURIComponent(redirectUrl || "/checking");
+  const backTo = decodeURIComponent(redirectUrl || "/FolderList");
 
   try {
     console.log("Request body:", req.body);
@@ -397,8 +397,6 @@ const shareUserDetails = async (req, res) => {
   }
 };
 //controller to get all shared folders and files with the user
-
-// controllers/shareController.js
 const getSharedWithMeFolders = async (req, res) => {
   try {
     const user = req.session.userId?.toString();
@@ -416,6 +414,11 @@ const getSharedWithMeFolders = async (req, res) => {
     const sharedItems = [];
 
     for (const share of shares) {
+      // ❌ Skip if no sharedBy or sharedWith is empty
+      if (!share.sharedBy || !Array.isArray(share.sharedWith) || share.sharedWith.length === 0) {
+        continue;
+      }
+
       const isFolder = !!share.folderId;
       const isFile = !!share.fileId;
 
@@ -528,10 +531,13 @@ const getSharedWithMeFolders = async (req, res) => {
       getFileIcon,
     });
   } catch (err) {
-    console.error("Error in getSharedItemsForUser:", err);
+    console.error("Error in getSharedWithMeFolders:", err);
     res.status(500).send("Server Error");
   }
 };
+
+
+
 
 //View the share file
 const ShareFilesView = async (req, res) => {

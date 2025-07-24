@@ -4,12 +4,14 @@ const CreateFolder = require('../model/folder');
 const FileModel = require('../model/File');
 const Share = require('../model/share');
 const home = async (req, res) => {
+	console.log('Session on /welcome:', req.session);
   try {
     let currentPath = req.query.path || '/'; // Default to root path if not provided
     // Set the current path in the session for later use
     req.session.currentPath = currentPath;
     currentPath = decodeURIComponent(currentPath);
     console.log(currentPath);
+	
     
     // Check if user is logged in
     if (!req.session.userId) {
