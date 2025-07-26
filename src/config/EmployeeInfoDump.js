@@ -2,10 +2,7 @@ const mongoose = require('mongoose');
 const axios = require('axios');
 const User = require('../model/users'); // Adjust path
 
-mongoose.connect('mongodb+srv://karmatshew471:DMS@cluster0.fmyq3j6.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+mongoose.connect('mongodb+srv://bilit:dms@cluster0.ex4vfs0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0');
 
 async function importFromAPI() {
   try {

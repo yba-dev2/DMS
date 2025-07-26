@@ -4,6 +4,7 @@ const nodemailer = require("nodemailer");
 const userEmail = process.env.USEREMAIL;
 const appPassword = process.env.APPPASSWORD;
 
+
 // Validate environment variables
 if (!userEmail || !appPassword) {
   console.error("❌ Missing email credentials in environment variables");

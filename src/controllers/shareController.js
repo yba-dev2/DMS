@@ -154,8 +154,7 @@ const shareFilesFolder = async (req, res) => {
       if (shareDoc.shareToAll) {
         req.flash(
           "info",
-          `${
-            type.charAt(0).toUpperCase() + type.slice(1)
+          `${type.charAt(0).toUpperCase() + type.slice(1)
           } is already shared with everyone.`
         );
         return res.redirect(backTo);
@@ -180,6 +179,7 @@ const shareFilesFolder = async (req, res) => {
       recipients = allUsers.map((user) => ({
         name: user.name,
         email: user.email,
+        department: user.department
       }));
 
       shareDoc.shareToAll = true;
@@ -194,8 +194,7 @@ const shareFilesFolder = async (req, res) => {
       if (isAlreadyShared) {
         req.flash(
           "info",
-          `${
-            type.charAt(0).toUpperCase() + type.slice(1)
+          `${type.charAt(0).toUpperCase() + type.slice(1)
           } is already shared with this user/group.`
         );
         return res.redirect(backTo);
@@ -211,7 +210,7 @@ const shareFilesFolder = async (req, res) => {
       if (shareWithUserId) {
         const user = await UserModel.findById(shareWithUserId);
         if (user) {
-          recipients.push({ name: user.name, email: user.email });
+          recipients.push({ name: user.name, email: user.email, department: user.department });
         }
       }
 
@@ -225,6 +224,7 @@ const shareFilesFolder = async (req, res) => {
           ...groupUsers.map((user) => ({
             name: user.name,
             email: user.email,
+            department: user.department
           }))
         );
       }
@@ -252,17 +252,24 @@ const shareFilesFolder = async (req, res) => {
       const subject = `New ${type} shared with you`;
       const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">File Sharing Notification</h2>
+          <h2 style="color: #333;">File/Folder Sharing Notification</h2>
           <p>Dear ${recipient.name},</p>
-          <p><strong>${sharer.email}</strong> has shared a ${type} named <strong>"${sharedItemName}"</strong> with you.</p>
-          <p>Please visit DMS System to review it.</p>
+          <p>
+            <strong>${sharer.name}</strong> from the <strong>${sharer.department}</strong> department 
+            (<strong>${sharer.email}</strong>) has shared a ${type} titled 
+            <strong>"${sharedItemName}"</strong> with you.
+          </p>
+          <p>
+            You can access the shared item by logging into the ERP system and navigating to the DMS module.
+          </p>
           <hr style="border: 1px solid #eee; margin: 20px 0;">
           <p style="color: #666; font-size: 12px;">
             Best regards,<br>
-            BIL Document Management System Team
+            BIL Document Management System
           </p>
         </div>
       `;
+
 
       try {
         await sendEmail(recipient.email, subject, html);
@@ -288,22 +295,19 @@ const shareFilesFolder = async (req, res) => {
     if (emailSuccessCount > 0 && emailFailureCount === 0) {
       req.flash(
         "success",
-        `${
-          type.charAt(0).toUpperCase() + type.slice(1)
-        } shared successfully. Email notifications sent to all recipients.`
+        `${type.charAt(0).toUpperCase() + type.slice(1)
+        } shared successfully. Email notifications sent to the recipients.`
       );
     } else if (emailSuccessCount > 0 && emailFailureCount > 0) {
       req.flash(
         "warning",
-        `${
-          type.charAt(0).toUpperCase() + type.slice(1)
+        `${type.charAt(0).toUpperCase() + type.slice(1)
         } shared successfully. ${emailSuccessCount} email(s) sent, ${emailFailureCount} failed.`
       );
     } else if (emailFailureCount > 0) {
       req.flash(
         "success",
-        `${
-          type.charAt(0).toUpperCase() + type.slice(1)
+        `${type.charAt(0).toUpperCase() + type.slice(1)
         } shared successfully, but email notifications failed to send.`
       );
     } else {
