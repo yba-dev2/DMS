@@ -7,7 +7,7 @@ const ftp = require("basic-ftp");
 const mime = require("mime-types");
 const { PDFDocument } = require("pdf-lib");
 const stream = require("stream");
-
+const sendEmail = require("../email/emailConfig");
 const ftpCredentials = {
   Finance: {
     host: process.env.FTP_HOST_FINANCE,
@@ -141,13 +141,17 @@ const shareFilesFolder = async (req, res) => {
         folderId: type === "folder" ? folder._id : null,
         sharedBy: sharerId,
         sharedWith: [],
-        shareToAll: false, // ✅ Fixed: Match schema field name
+        shareToAll: false,
       });
     }
 
+    const sharer = await UserModel.findById(sharerId);
+    const sharedItemName = type === "folder" ? folder.name : file.originalname;
+    let recipients = [];
+
     if (shareToAll === "true" || shareToAll === true) {
+
       if (shareDoc.shareToAll) {
-        // ✅ Fixed: Match schema field name
         req.flash(
           "info",
           `${
@@ -173,9 +177,13 @@ const shareFilesFolder = async (req, res) => {
         }
       });
 
-      shareDoc.shareToAll = true; // ✅ Fixed: Match schema field name
+      recipients = allUsers.map((user) => ({
+        name: user.name,
+        email: user.email,
+      }));
+
+      shareDoc.shareToAll = true;
     } else if (shareWithUserId || shareWithGroupId) {
-      // Check if already shared with this user/group
       const isAlreadyShared = shareDoc.sharedWith?.some((entry) => {
         return (
           (shareWithUserId && entry.userId?.toString() === shareWithUserId) ||
@@ -193,33 +201,122 @@ const shareFilesFolder = async (req, res) => {
         return res.redirect(backTo);
       }
 
-      // Add new share entry
       shareDoc.sharedWith.push({
         ...(shareWithUserId ? { userId: shareWithUserId } : {}),
         ...(shareWithGroupId ? { groupId: shareWithGroupId } : {}),
         access: sanitizedAccess,
         sharedAt: new Date(),
       });
+
+      if (shareWithUserId) {
+        const user = await UserModel.findById(shareWithUserId);
+        if (user) {
+          recipients.push({ name: user.name, email: user.email });
+        }
+      }
+
+      if (shareWithGroupId) {
+        const groupUsers = await UserModel.find({
+          group: shareWithGroupId,
+          _id: { $ne: sharerId },
+        });
+
+        recipients.push(
+          ...groupUsers.map((user) => ({
+            name: user.name,
+            email: user.email,
+          }))
+        );
+      }
     }
 
-    // ✅ Ensure Mongoose recognizes the change
     shareDoc.markModified("shareToAll");
     await shareDoc.save();
 
-    // ✅ Verify the save worked
     const savedDoc = await ShareModel.findById(shareDoc._id);
-    req.flash(
-      "success",
-      `${type.charAt(0).toUpperCase() + type.slice(1)} shared successfully.`
-    );
+
+    // Send notification emails with better error handling
+    let emailSuccessCount = 0;
+    let emailFailureCount = 0;
+
+    for (const recipient of recipients) {
+      // Validate email address
+      if (!recipient.email || !recipient.email.includes("@")) {
+        console.warn(
+          `⚠️ Invalid email address for user ${recipient.name}: ${recipient.email}`
+        );
+        emailFailureCount++;
+        continue;
+      }
+
+      const subject = `New ${type} shared with you`;
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">File Sharing Notification</h2>
+          <p>Dear ${recipient.name},</p>
+          <p><strong>${sharer.email}</strong> has shared a ${type} named <strong>"${sharedItemName}"</strong> with you.</p>
+          <p>Please visit DMS System to review it.</p>
+          <hr style="border: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #666; font-size: 12px;">
+            Best regards,<br>
+            BIL Document Management System Team
+          </p>
+        </div>
+      `;
+
+      try {
+        await sendEmail(recipient.email, subject, html);
+        emailSuccessCount++;
+      } catch (emailErr) {
+        emailFailureCount++;
+        console.error(
+          `❌ Failed to send email to ${recipient.email}:`,
+          emailErr.message
+        );
+
+        // Log specific error details for debugging
+        if (emailErr.code) {
+          console.error(`Error code: ${emailErr.code}`);
+        }
+        if (emailErr.response) {
+          console.error(`SMTP Response: ${emailErr.response}`);
+        }
+      }
+    }
+
+    // Provide feedback about email sending
+    if (emailSuccessCount > 0 && emailFailureCount === 0) {
+      req.flash(
+        "success",
+        `${
+          type.charAt(0).toUpperCase() + type.slice(1)
+        } shared successfully. Email notifications sent to all recipients.`
+      );
+    } else if (emailSuccessCount > 0 && emailFailureCount > 0) {
+      req.flash(
+        "warning",
+        `${
+          type.charAt(0).toUpperCase() + type.slice(1)
+        } shared successfully. ${emailSuccessCount} email(s) sent, ${emailFailureCount} failed.`
+      );
+    } else if (emailFailureCount > 0) {
+      req.flash(
+        "success",
+        `${
+          type.charAt(0).toUpperCase() + type.slice(1)
+        } shared successfully, but email notifications failed to send.`
+      );
+    } else {
+      req.flash(
+        "success",
+        `${type.charAt(0).toUpperCase() + type.slice(1)} shared successfully.`
+      );
+    }
     return res.redirect(backTo);
   } catch (err) {
-    console.error("Error in shareFilesFolder:", err);
-    req.flash("error", "An error occurred while sharing.");
     return res.redirect(backTo);
   }
 };
-
 // Keep the original controller for backward compatibility
 const removeSharedFolder = async (req, res) => {
   const {
@@ -235,7 +332,7 @@ const removeSharedFolder = async (req, res) => {
 
   try {
     console.log("Request body:", req.body);
-    
+
     // Validate base input
     if (!itemId || !itemType) {
       req.flash("error", "Invalid request parameters");
@@ -258,7 +355,7 @@ const removeSharedFolder = async (req, res) => {
     // FIXED: Handle bulk operations (selected array exists)
     if (Array.isArray(selected) && selected.length > 0) {
       console.log("DEBUG: Processing bulk operation");
-      
+
       // Remove selected users/groups
       const pullConditions = selected
         .map((id) => {
@@ -277,9 +374,13 @@ const removeSharedFolder = async (req, res) => {
 
       // ALSO handle stopShareToAll if it's set during bulk operations
       if (stopShareToAll === "true" || stopShareToAll === true) {
-        await ShareModel.findOneAndUpdate(query, {
-        $set: { shareToAll: false },
-      }, { upsert: true });
+        await ShareModel.findOneAndUpdate(
+          query,
+          {
+            $set: { shareToAll: false },
+          },
+          { upsert: true }
+        );
       }
 
       // Check if the doc should be deleted
@@ -299,10 +400,14 @@ const removeSharedFolder = async (req, res) => {
     // Handle ONLY stopShareToAll (no selected users)
     if (stopShareToAll === "true" || stopShareToAll === true) {
       console.log("DEBUG: Processing stopShareToAll only");
-      
-      await ShareModel.findOneAndUpdate(query, {
-        $set: { shareToAll: false },
-      }, { upsert: true });
+
+      await ShareModel.findOneAndUpdate(
+        query,
+        {
+          $set: { shareToAll: false },
+        },
+        { upsert: true }
+      );
 
       req.flash("success", "Stopped sharing with everyone.");
       return res.redirect(backTo);
@@ -311,7 +416,7 @@ const removeSharedFolder = async (req, res) => {
     // Handle individual user or group removal (legacy - probably not used with your current frontend)
     if (userId || groupId) {
       console.log("DEBUG: Processing individual removal");
-      
+
       const pullCondition = userId ? { userId: userId } : { groupId: groupId };
 
       await ShareModel.updateOne(query, {
@@ -334,7 +439,6 @@ const removeSharedFolder = async (req, res) => {
     // If we reach here, invalid request
     req.flash("error", "Invalid request parameters");
     return res.redirect(backTo);
-
   } catch (err) {
     console.error("Error removing shared access:", err);
     req.flash("error", "Server error occurred while removing access");
@@ -415,7 +519,11 @@ const getSharedWithMeFolders = async (req, res) => {
 
     for (const share of shares) {
       // ❌ Skip if no sharedBy or sharedWith is empty
-      if (!share.sharedBy || !Array.isArray(share.sharedWith) || share.sharedWith.length === 0) {
+      if (
+        !share.sharedBy ||
+        !Array.isArray(share.sharedWith) ||
+        share.sharedWith.length === 0
+      ) {
         continue;
       }
 
@@ -535,9 +643,6 @@ const getSharedWithMeFolders = async (req, res) => {
     res.status(500).send("Server Error");
   }
 };
-
-
-
 
 //View the share file
 const ShareFilesView = async (req, res) => {

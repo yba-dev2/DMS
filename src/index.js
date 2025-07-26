@@ -40,9 +40,8 @@ app.use(session({
 }));
 //initialize routes
 initRoutes(app);
-//DB connection
 
 let port = process.env.PORT;
 app.listen(port, () => {
-  console.log(`Running at https://dms.bil.local:${port}`);
+  console.log(`Running at https://dms.bil.local${port}`);
 });
