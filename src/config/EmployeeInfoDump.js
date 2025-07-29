@@ -22,7 +22,7 @@ async function importFromAPI() {
         name: emp.name,
         email: emp.email,
         employee_code: emp.employee_code,
-        department: emp.departments,    // renamed
+        department: emp.department,    // renamed
       };
 
       await User.updateOne(

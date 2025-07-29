@@ -2,7 +2,7 @@ const UserModel = require("../model/users");
 const CommitteeGroup = require("../model/Committee");
 
 const addCommittee = async (req, res) => {
-  const allUsers = await UserModel.find({}).select("user name");
+  const allUsers = await UserModel.find({}).select("user name department");
   const user = req.session.userId
     ? UserModel.findById(req.session.userId)
     : null;

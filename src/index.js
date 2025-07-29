@@ -43,5 +43,5 @@ initRoutes(app);
 
 let port = process.env.PORT;
 app.listen(port, () => {
-  console.log(`Running at http://172.16.40.91:${port}`);
+  console.log(`Running at https://dms.bil.local${port}`);
 });

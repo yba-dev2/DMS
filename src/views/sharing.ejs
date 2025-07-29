@@ -146,7 +146,6 @@
                                 <% } %>
                         </td>
 
-
                         <!-- Action Buttons -->
                         <td>
                           <% if (file.type==="folder" ) { %>
@@ -204,24 +203,90 @@
       </div>
     </div>
 
-    <!-- PDF View Model  -->
-    <!-- PDF Preview Modal -->
+    <!-- Enhanced PDF Preview Modal -->
     <div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-labelledby="pdfPreviewModalLabel"
       aria-hidden="true">
-      <div class="modal-dialog modal-xl" style="max-width: 90vw;">
+      <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
-          <div class="modal-header">
+          <div class="modal-header border-bottom-0 bg-light">
             <h5 class="modal-title">PDF Preview</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="d-flex flex-wrap align-items-center justify-content-end ms-auto px-2 py-1 gap-2">
+              <!-- Navigation Controls -->
+              <div class="btn-group btn-group-sm me-2" role="group" aria-label="PDF Navigation">
+                <button class="btn btn-outline-primary" onclick="goToFirstPage()" id="firstPageBtn" title="First Page">
+                  <i class="bx bx-first-page"></i>
+                </button>
+                <button class="btn btn-outline-primary" onclick="goToPrevPage()" id="prevPageBtn" title="Previous Page">
+                  <i class="bx bx-chevron-left"></i>
+                </button>
+                <button class="btn btn-outline-primary" onclick="goToNextPage()" id="nextPageBtn" title="Next Page">
+                  <i class="bx bx-chevron-right"></i>
+                </button>
+                <button class="btn btn-outline-primary" onclick="goToLastPage()" id="lastPageBtn" title="Last Page">
+                  <i class="bx bx-last-page"></i>
+                </button>
+              </div>
+
+              <!-- Page Info -->
+              <div class="d-flex align-items-center gap-2 me-3">
+                <span>Page</span>
+                <input type="number" id="pageInput" class="form-control form-control-sm text-center" min="1"
+                  style="max-width: 70px;" onchange="goToPage(this.value)">
+                <span>of <span id="totalPages">0</span></span>
+              </div>
+
+              <!-- Zoom Controls -->
+              <div class="btn-group btn-group-sm align-items-center me-3" role="group" aria-label="Zoom Controls">
+                <button class="btn btn-outline-secondary" onclick="zoomOut()" title="Zoom Out">
+                  <i class="bx bx-zoom-out"></i>
+                </button>
+                <span class="badge bg-secondary-subtle text-dark d-flex align-items-center px-2"
+                  id="zoomLevel">150%</span>
+                <button class="btn btn-outline-secondary" onclick="zoomIn()" title="Zoom In">
+                  <i class="bx bx-zoom-in"></i>
+                </button>
+              </div>
+
+              <!-- View Mode Toggle -->
+              <button class="btn btn-outline-info btn-sm me-2" onclick="toggleViewMode()" id="viewModeBtn"
+                title="Toggle View Mode">
+                Show All Pages
+              </button>
+            </div>
+
+            <button type="button" class="btn-close ms-3" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body text-center">
-            <canvas id="pdf-render" style="width: 100%; border: 1px solid #ccc;"></canvas>
+
+          <div class="modal-body p-0">
+            <!-- Loading Indicator -->
+            <div id="pdfLoading" class="text-center py-5 px-3 bg-white">
+              <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
+              <p class="mb-3">Loading PDF...</p>
+              <div class="container">
+                <div class="row justify-content-center">
+                  <div class="col-12 col-md-6">
+                    <div class="progress">
+                      <div id="loadProgress" class="progress-bar progress-bar-striped progress-bar-animated w-0"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Error Message -->
+            <div id="pdfError" class="alert alert-danger d-none mx-3 my-2" role="alert"></div>
+
+            <!-- PDF Container -->
+            <div id="pdfContainer" class="d-none bg-body-secondary p-4 overflow-auto" style="max-height: 80vh;">
+              <!-- PDF pages will be rendered here -->
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- search functionality  -->
+
+    <!-- Search functionality -->
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         const searchInput = document.getElementById("search");
@@ -242,7 +307,6 @@
             }
           });
 
-          // Show/hide "No Results" row
           if (noResultsRow) {
             if (!anyVisible) {
               noResultsRow.style.display = "table-row";
@@ -253,7 +317,7 @@
         }
 
         searchInput.addEventListener("input", filterRows);
-        filterRows(); // Initial call to set correct state
+        filterRows();
       });
     </script>
 
@@ -263,60 +327,337 @@
     <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
+    <!-- Enhanced PDF Preview Script -->
     <script>
+      // Global variables for PDF handling
+      let currentPdf = null;
+      let currentPageNum = 1;
+      let totalPagesCount = 0;
+      let currentScale = 1.5;
+      let viewMode = 'single'; // 'single' or 'all'
+      let pdfjsLib = null;
+
+      // Initialize PDF.js when page loads
+      document.addEventListener('DOMContentLoaded', function () {
+        if (window['pdfjs-dist/build/pdf']) {
+          pdfjsLib = window['pdfjs-dist/build/pdf'];
+          pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+          console.log('PDF.js initialized successfully');
+        } else {
+          console.error('PDF.js failed to load');
+        }
+      });
+
+      // Main preview function
       async function previewPdf(fileUrl, fileType) {
-        const canvas = document.getElementById("pdf-render");
         const modal = new bootstrap.Modal(document.getElementById("pdfPreviewModal"));
+        const loading = document.getElementById("pdfLoading");
+        const error = document.getElementById("pdfError");
+        const container = document.getElementById("pdfContainer");
+        const progress = document.getElementById("loadProgress");
+
+        // Reset UI
+        loading.classList.remove('d-none');
+        error.classList.add('d-none');
+        container.classList.add('d-none');
+        container.innerHTML = '';
+        progress.style.width = '0%';
 
         modal.show();
 
         try {
-          const pdfjsLib = window["pdfjs-dist/build/pdf"];
-          pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+          if (!pdfjsLib) {
+            throw new Error('PDF.js library not loaded');
+          }
 
-          const loadingTask = pdfjsLib.getDocument(fileUrl);
-          const pdf = await loadingTask.promise;
-          const page = await pdf.getPage(1);
+          console.log('Loading PDF from:', fileUrl);
+          progress.style.width = '20%';
 
-          const scale = 1.5;
-          const viewport = page.getViewport({
-            scale
+          // Load the PDF document
+          const loadingTask = pdfjsLib.getDocument({
+            url: fileUrl,
+            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+            cMapPacked: true
           });
 
-          const context = canvas.getContext("2d");
+          // Track loading progress
+          loadingTask.onProgress = function (progressData) {
+            if (progressData.total > 0) {
+              const percent = Math.round((progressData.loaded / progressData.total) * 60) + 20;
+              progress.style.width = percent + '%';
+            }
+          };
+
+          currentPdf = await loadingTask.promise;
+          totalPagesCount = currentPdf.numPages;
+
+          console.log('PDF loaded successfully. Total pages:', totalPagesCount);
+          progress.style.width = '90%';
+
+          // Update UI elements
+          document.getElementById('totalPages').textContent = totalPagesCount;
+          document.getElementById('pageInput').max = totalPagesCount;
+          document.getElementById('pageInput').value = 1;
+          currentPageNum = 1;
+
+          // Render first page or all pages based on mode
+          if (viewMode === 'single') {
+            await renderSinglePage(1);
+          } else {
+            await renderAllPages();
+          }
+
+          progress.style.width = '100%';
+
+          // Hide loading and show container
+          setTimeout(() => {
+            loading.classList.add('d-none');
+            container.classList.remove('d-none');
+            updateNavigationButtons();
+          }, 200);
+
+        } catch (err) {
+          console.error("Failed to preview PDF:", err);
+          loading.classList.add('d-none');
+          error.classList.remove('d-none');
+
+          let errorMsg = 'Failed to load PDF: ';
+          if (err.message.includes('Invalid PDF')) {
+            errorMsg += 'The file is corrupted or not a valid PDF.';
+          } else if (err.message.includes('404')) {
+            errorMsg += 'PDF file not found.';
+          } else if (err.message.includes('CORS')) {
+            errorMsg += 'Access denied due to CORS policy.';
+          } else if (err.message.includes('range')) {
+            errorMsg += 'Invalid page number requested.';
+          } else {
+            errorMsg += err.message;
+          }
+
+          error.textContent = errorMsg;
+        }
+      }
+
+      // Render a single page
+      async function renderSinglePage(pageNum) {
+        if (!currentPdf || pageNum < 1 || pageNum > totalPagesCount) {
+          console.error('Invalid page number:', pageNum);
+          return;
+        }
+
+        try {
+          const container = document.getElementById('pdfContainer');
+          container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Rendering page...</p></div>';
+
+          const page = await currentPdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale: currentScale });
+
+          // Create canvas for this page
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
           canvas.height = viewport.height;
           canvas.width = viewport.width;
+          canvas.style.maxWidth = '100%';
+          canvas.style.height = 'auto';
+          canvas.style.border = '1px solid #ddd';
+          canvas.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
 
+          // Clear container and add canvas
+          container.innerHTML = '';
+          const pageWrapper = document.createElement('div');
+          pageWrapper.className = 'text-center mb-3';
+          pageWrapper.appendChild(canvas);
+          container.appendChild(pageWrapper);
+
+          // Render the page
           const renderContext = {
             canvasContext: context,
             viewport: viewport
           };
 
           await page.render(renderContext).promise;
-        } catch (error) {
-          console.error("Failed to preview PDF:", error);
-          modal.hide();
-          alert("Failed to load PDF preview.");
+          console.log('Page', pageNum, 'rendered successfully');
+
+        } catch (err) {
+          console.error('Error rendering page:', err);
+          const container = document.getElementById('pdfContainer');
+          container.innerHTML = `<div class="alert alert-danger">Error rendering page ${pageNum}: ${err.message}</div>`;
+        }
+      }
+
+      // Render all pages
+      async function renderAllPages() {
+        if (!currentPdf) return;
+
+        const container = document.getElementById('pdfContainer');
+        container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Rendering all pages...</p></div>';
+
+        try {
+          container.innerHTML = '';
+
+          for (let pageNum = 1; pageNum <= totalPagesCount; pageNum++) {
+            const page = await currentPdf.getPage(pageNum);
+            const viewport = page.getViewport({ scale: currentScale });
+
+            // Create canvas for this page
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            canvas.style.maxWidth = '100%';
+            canvas.style.height = 'auto';
+            canvas.style.border = '1px solid #ddd';
+            canvas.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+
+            // Create page wrapper
+            const pageWrapper = document.createElement('div');
+            pageWrapper.className = 'text-center mb-4';
+            pageWrapper.innerHTML = `<div class="badge bg-secondary mb-2">Page ${pageNum} of ${totalPagesCount}</div>`;
+            pageWrapper.appendChild(canvas);
+            container.appendChild(pageWrapper);
+
+            // Render the page
+            const renderContext = {
+              canvasContext: context,
+              viewport: viewport
+            };
+
+            await page.render(renderContext).promise;
+            console.log('Page', pageNum, 'rendered');
+          }
+
+        } catch (err) {
+          console.error('Error rendering all pages:', err);
+          container.innerHTML = `<div class="alert alert-danger">Error rendering pages: ${err.message}</div>`;
+        }
+      }
+
+      // Navigation functions
+      function goToFirstPage() {
+        if (viewMode === 'single') {
+          currentPageNum = 1;
+          document.getElementById('pageInput').value = currentPageNum;
+          renderSinglePage(currentPageNum);
+          updateNavigationButtons();
+        }
+      }
+
+      function goToPrevPage() {
+        if (viewMode === 'single' && currentPageNum > 1) {
+          currentPageNum--;
+          document.getElementById('pageInput').value = currentPageNum;
+          renderSinglePage(currentPageNum);
+          updateNavigationButtons();
+        }
+      }
+
+      function goToNextPage() {
+        if (viewMode === 'single' && currentPageNum < totalPagesCount) {
+          currentPageNum++;
+          document.getElementById('pageInput').value = currentPageNum;
+          renderSinglePage(currentPageNum);
+          updateNavigationButtons();
+        }
+      }
+
+      function goToLastPage() {
+        if (viewMode === 'single') {
+          currentPageNum = totalPagesCount;
+          document.getElementById('pageInput').value = currentPageNum;
+          renderSinglePage(currentPageNum);
+          updateNavigationButtons();
+        }
+      }
+
+      function goToPage(pageNum) {
+        const page = parseInt(pageNum);
+        if (page >= 1 && page <= totalPagesCount && viewMode === 'single') {
+          currentPageNum = page;
+          renderSinglePage(currentPageNum);
+          updateNavigationButtons();
+        }
+      }
+
+      // Zoom functions
+      function zoomIn() {
+        currentScale += 0.25;
+        if (currentScale > 3) currentScale = 3;
+        document.getElementById('zoomLevel').textContent = Math.round(currentScale * 100) + '%';
+
+        if (viewMode === 'single') {
+          renderSinglePage(currentPageNum);
+        } else {
+          renderAllPages();
+        }
+      }
+
+      function zoomOut() {
+        currentScale -= 0.25;
+        if (currentScale < 0.5) currentScale = 0.5;
+        document.getElementById('zoomLevel').textContent = Math.round(currentScale * 100) + '%';
+
+        if (viewMode === 'single') {
+          renderSinglePage(currentPageNum);
+        } else {
+          renderAllPages();
+        }
+      }
+
+      // Toggle view mode
+      function toggleViewMode() {
+        const btn = document.getElementById('viewModeBtn');
+
+        if (viewMode === 'single') {
+          viewMode = 'all';
+          btn.textContent = 'Single Page';
+          renderAllPages();
+        } else {
+          viewMode = 'single';
+          btn.textContent = 'Show All Pages';
+          renderSinglePage(currentPageNum);
+        }
+
+        updateNavigationButtons();
+      }
+
+      // Update navigation button states
+      function updateNavigationButtons() {
+        const firstBtn = document.getElementById('firstPageBtn');
+        const prevBtn = document.getElementById('prevPageBtn');
+        const nextBtn = document.getElementById('nextPageBtn');
+        const lastBtn = document.getElementById('lastPageBtn');
+        const pageInput = document.getElementById('pageInput');
+
+        if (viewMode === 'single') {
+          firstBtn.disabled = (currentPageNum === 1);
+          prevBtn.disabled = (currentPageNum === 1);
+          nextBtn.disabled = (currentPageNum === totalPagesCount);
+          lastBtn.disabled = (currentPageNum === totalPagesCount);
+          pageInput.disabled = false;
+        } else {
+          firstBtn.disabled = true;
+          prevBtn.disabled = true;
+          nextBtn.disabled = true;
+          lastBtn.disabled = true;
+          pageInput.disabled = true;
         }
       }
     </script>
 
+    <!-- Security Script -->
     <script>
       document.addEventListener('keydown', function (e) {
-        // Block Ctrl + P (Print), Ctrl + S (Save), Ctrl + U (View Source), Ctrl + C (Copy), etc.
         if (e.ctrlKey && ['p', 's', 'u', 'c', 'a'].includes(e.key.toLowerCase())) {
           e.preventDefault();
           alert("This shortcut is disabled.");
         }
 
-        // Block F12 (Dev tools)
         if (e.key === "F12") {
           e.preventDefault();
           alert("F12 is disabled.");
         }
       });
 
-      // Optional: block right-click context menu
       document.addEventListener('contextmenu', function (e) {
         e.preventDefault();
       });
