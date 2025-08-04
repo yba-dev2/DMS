@@ -108,31 +108,49 @@ const ViewGroups = async (req, res) => {
 const editGroup = async (req, res) => {
   try {
     const groupId = req.params.id;
-    const user = req.session.userId;
-    
-    // Find the group and check if current user is the leader
-    const group = await CommitteeGroup.findById(groupId).populate("memberSecretary");
-    
+    const currentUserId = req.session.userId;
+
+    const group = await CommitteeGroup.findByPk(groupId, {
+      include: [
+        {
+          model: User,
+          as: 'secretary', // Group leader
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'members', // Group members
+          attributes: ['id', 'name', 'email'],
+          through: { attributes: [] } // omit join table fields
+        }
+      ]
+    });
+
     if (!group) {
       return res.status(404).send("Group not found");
     }
-    const users = await User.find();
-    // Check if current user is the group leader
-    if (group.memberSecretary._id.toString() !== user.toString()) {
+
+    if (group.secretary.id !== currentUserId) {
       return res.status(403).send("Access denied. Only group leader can edit this group.");
     }
-    
+
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email']
+    });
+
     res.render("EditGroup", {
       group,
       users,
-      user
+      user: currentUserId,
     });
-    
+
   } catch (error) {
     console.error("Error in edit group:", error);
     res.status(500).send("Internal Server Error");
   }
 };
+
+
 //Post Edited Group
 const postEditGroup = async (req, res) => {
   try {

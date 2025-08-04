@@ -26,7 +26,7 @@
             <h4 class="card-title">Edit Group</h4>
           </div>
           <div class="card-body">
-            <form action="/committee-groups/<%= group._id %>/edit" method="POST">
+            <form action="/committee-groups/<%= group.id %>/edit" method="POST">
               <div class="row">
                 <!-- Group Name -->
                 <div class="col-lg-6">
@@ -35,14 +35,14 @@
                     <input type="text" id="roles-name" name="groupName" class="form-control" value="<%= group.groupName %>" required>
                   </div>
                 </div>
-                <!-- Member Secretary -->
+
+                <!-- Member Secretary (Group Leader) -->
                 <div class="col-lg-6">
                   <div class="mb-3">
                     <label for="memberSecretary" class="form-label">Group Leader</label>
-                    <select name="memberSecretary" class="form-control" data-choices data-choices-removeItem required id="shareWithGroupId">
-
-                      <% users.forEach(function(u) { %>
-                      <option value="<%= u._id %>" <%= group.memberSecretary && u._id.toString() === group.memberSecretary._id.toString() ? 'selected' : '' %>>
+                    <select name="memberSecretary" class="form-control" required>
+                      <% users.forEach(u => { %>
+                      <option value="<%= u.id %>" <%= group.secretary && u.id === group.secretary.id ? 'selected' : '' %>>
                         <%= u.name %>
                       </option>
                       <% }) %>
@@ -50,26 +50,29 @@
                   </div>
                 </div>
               </div>
+
               <!-- Members (Multi-select) -->
               <div class="col-lg-6">
                 <div class="mb-3">
                   <label for="choices-multiple-remove-button" class="form-label">Add Members</label>
-                  <select class="form-control" id="choices-multiple-remove-button" data-choices data-choices-removeItem name="members" multiple>
-                    <% users.forEach(function(u) { 
-                            const isSelected = group.members.some(m => m._id.toString() === u._id.toString());
-                        %>
-                    <option value="<%= u._id %>" <%= isSelected ? 'selected' : '' %> <%= isSelected ? 'data-custom-class="bg-blue text-white"' : '' %>>
+                  <select name="members" id="choices-multiple-remove-button" class="form-control" data-choices data-choices-removeItem multiple required>
+                    <% users.forEach(u => {
+                      const isSelected = group.members && group.members.some(m => m.id === u.id);
+                    %>
+                    <option value="<%= u.id %>" <%= isSelected ? 'selected' : '' %>>
                       <%= u.name %>
                     </option>
                     <% }) %>
                   </select>
                 </div>
               </div>
+
               <!-- Submit Button -->
               <div class="modal-footer">
                 <button type="submit" class="btn btn-primary">Update</button>
               </div>
             </form>
+
 
           </div>
 

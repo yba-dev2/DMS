@@ -401,13 +401,6 @@ const shareFilesFolder = async (req, res) => {
       // Share with group - get all group members
       const groupMembers = await User.findAll({
         attributes: ["id", "name", "email", "department"],
-        include: [
-          {
-            model: UserGroup, // Assuming you have a UserGroup junction table
-            where: { groupId: shareWithGroupId },
-            attributes: [],
-          },
-        ],
       });
       recipients = recipients.concat(groupMembers);
     }
