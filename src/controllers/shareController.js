@@ -991,6 +991,19 @@ const getSharedWithMeFolders = async (req, res) => {
               as: "user",
               attributes: ["id", "name", "email"],
             },
+            {
+              model: CommitteeGroup, // or whatever your group model is called
+              as: "group",
+              attributes: ["id", "groupName"],
+              include: [
+                {
+                  model: User,
+                  as: "members", // make sure this alias matches your association
+                  attributes: ["id", "name", "email"],
+                  through: { attributes: [] }, // hide join table if using many-to-many
+                },
+              ],
+            },
           ],
         },
         {
@@ -1053,6 +1066,7 @@ const getSharedWithMeFolders = async (req, res) => {
             const to = sw.group
               ? `${sw.group.groupName} (Group)`
               : sw.user?.name || "Unknown";
+
             return {
               to,
               access: sw.access,
