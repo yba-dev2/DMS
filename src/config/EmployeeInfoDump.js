@@ -2,9 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { Sequelize, DataTypes } = require('sequelize');
 
-const sequelize = new Sequelize('DMS', 'sa', 'p1ne@pple', {
-  host: '172.16.16.188',
-  port: 4433,
+const sequelize = new Sequelize('test DMS', 'sa', '!nf0rm@tioN', {
+  host: 'localhost',
+  port: 1433,
   dialect: 'mssql',
   dialectOptions: {
     options: {

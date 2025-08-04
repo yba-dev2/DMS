@@ -225,10 +225,14 @@ function getFileIcon(fileName) {
 }
 //controller to share files and folders
 const shareFilesFolder = async (req, res) => {
+  // Log the entire request body for debugging
+  // console.log("Full request body:", JSON.stringify(req.body, null, 2));
+  
   const {
     id,
     access,
     shareWithUserId,
+    shareWithUserIds, // New: Array of user IDs for multi-user sharing
     shareWithGroupId,
     type,
     redirectUrl,
@@ -239,12 +243,25 @@ const shareFilesFolder = async (req, res) => {
   const sharerId = req.session.userId;
 
   try {
-    if (!shareToAll && !shareWithUserId && !shareWithGroupId) {
+    // Enhanced validation to include multi-user sharing
+    if (!shareToAll && !shareWithUserId && !shareWithUserIds && !shareWithGroupId) {
       req.flash(
         "error",
-        "Please select a user, group, or choose to share with all."
+        "Please select a user, multiple users, group, or choose to share with all."
       );
       return res.redirect(backTo);
+    }
+
+    // Check if shareWithUserId contains multiple IDs (comma-separated)
+    // If so, convert it to shareWithUserIds
+    let actualShareWithUserId = shareWithUserId;
+    let actualShareWithUserIds = shareWithUserIds;
+    
+    if (shareWithUserId && typeof shareWithUserId === 'string' && shareWithUserId.includes(',')) {
+      console.log("Multiple users detected in shareWithUserId:", shareWithUserId);
+      // Convert comma-separated shareWithUserId to shareWithUserIds
+      actualShareWithUserIds = shareWithUserId;
+      actualShareWithUserId = null; // Clear single user ID
     }
 
     if (!["file", "folder"].includes(type)) {
@@ -271,17 +288,37 @@ const shareFilesFolder = async (req, res) => {
     }
 
     const uploaderId = type === "folder" ? folder.uploadedBy : file.uploadedBy;
-    if (
-      !shareToAll &&
-      shareWithUserId &&
-      parseInt(shareWithUserId) === sharerId &&
-      uploaderId === sharerId
-    ) {
+    
+    // Enhanced self-sharing validation for single user
+    if (!shareToAll && actualShareWithUserId && parseInt(actualShareWithUserId) === sharerId && uploaderId === sharerId) {
       req.flash(
         "error",
         `You cannot share the ${type} with yourself as the owner.`
       );
       return res.redirect(backTo);
+    }
+
+    // Validate multi-user selection doesn't include the owner
+    if (!shareToAll && actualShareWithUserIds) {
+      // Handle both array and string formats for validation
+      let userIdsForValidation = [];
+      
+      if (Array.isArray(actualShareWithUserIds)) {
+        userIdsForValidation = actualShareWithUserIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+      } else if (typeof actualShareWithUserIds === 'string') {
+        userIdsForValidation = actualShareWithUserIds
+          .split(',')
+          .map(id => parseInt(id.trim()))
+          .filter(id => !isNaN(id));
+      }
+      
+      if (userIdsForValidation.includes(sharerId) && uploaderId === sharerId) {
+        req.flash(
+          "error",
+          `You cannot include yourself in the share list as the owner.`
+        );
+        return res.redirect(backTo);
+      }
     }
 
     const sanitizedAccess = ["write", "NoDownload"].includes(access)
@@ -362,11 +399,114 @@ const shareFilesFolder = async (req, res) => {
       return res.redirect(backTo);
     }
 
-    // Share with a single user or group
+    // NEW LOGIC: Handle multi-user sharing (more than 5 users)
+    if (actualShareWithUserIds) {
+      console.log("Raw actualShareWithUserIds:", actualShareWithUserIds, "Type:", typeof actualShareWithUserIds);
+      
+      // Handle both array and comma-separated string formats
+      let userIdsArray = [];
+      
+      if (Array.isArray(actualShareWithUserIds)) {
+        userIdsArray = actualShareWithUserIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+      } else if (typeof actualShareWithUserIds === 'string') {
+        // Handle comma-separated string from form submission
+        userIdsArray = actualShareWithUserIds
+          .split(',')
+          .map(id => parseInt(id.trim()))
+          .filter(id => !isNaN(id));
+      }
+      
+      console.log("Parsed userIdsArray:", userIdsArray);
+      
+      if (userIdsArray.length > 0) {
+      
+        if (userIdsArray.length === 0) {
+          req.flash("error", "Invalid user selection.");
+          return res.redirect(backTo);
+        }
+
+      // Check for already shared users
+      const existingShares = await SharedWith.findAll({
+        where: {
+          shareId: shareDoc.id,
+          userId: { [Op.in]: userIdsArray },
+        },
+      });
+
+      const alreadySharedUserIds = existingShares.map(share => share.userId);
+      const newUserIds = userIdsArray.filter(userId => !alreadySharedUserIds.includes(userId));
+
+      if (newUserIds.length === 0) {
+        const message = alreadySharedUserIds.length === 1 
+          ? `${type} is already shared with the selected user.`
+          : `${type} is already shared with all selected users.`;
+        req.flash("info", message);
+        return res.redirect(backTo);
+      }
+
+      // Create SharedWith entries for new users
+      const sharedWithEntries = newUserIds.map(userId => ({
+        shareId: shareDoc.id,
+        userId: userId,
+        access: sanitizedAccess,
+        sharedAt: new Date(),
+      }));
+
+      await SharedWith.bulkCreate(sharedWithEntries);
+
+      // Get user details for email notifications
+      const recipients = await User.findAll({
+        where: { id: { [Op.in]: newUserIds } },
+        attributes: ["id", "name", "email", "department"],
+      });
+
+      // Send email notifications
+      if (recipients.length > 0) {
+        // For large recipient lists (>10), process in background
+        if (recipients.length > 10) {
+          processEmailNotifications(
+            recipients,
+            sharer,
+            type,
+            sharedItemName
+          ).catch((error) => {
+            console.error("Background email processing failed:", error);
+          });
+        } else {
+          // For smaller lists, send immediately
+          sendEmailNotifications(
+            recipients,
+            sharer,
+            type,
+            sharedItemName,
+            req
+          ).catch((error) => {
+            console.error("Email notification failed:", error);
+          });
+        }
+      }
+
+      const sharedCount = newUserIds.length;
+      const skipCount = alreadySharedUserIds.length;
+      let message = `${type} shared with ${sharedCount} user${sharedCount > 1 ? 's' : ''}.`;
+      
+      if (skipCount > 0) {
+        message += ` (${skipCount} user${skipCount > 1 ? 's' : ''} already had access)`;
+      }
+
+        req.flash("success", message);
+        return res.redirect(backTo);
+      } else {
+        // If no valid user IDs, treat as if shareWithUserIds wasn't provided
+        console.log("No valid user IDs found in actualShareWithUserIds:", actualShareWithUserIds);
+      }
+    }
+
+    // Original logic for single user or group sharing
     const isAlreadyShared = await SharedWith.findOne({
       where: {
         shareId: shareDoc.id,
-        ...(shareWithUserId && { userId: shareWithUserId }),
+        ...(actualShareWithUserId && { userId: actualShareWithUserId }),
         ...(shareWithGroupId && { groupId: shareWithGroupId }),
       },
     });
@@ -376,33 +516,48 @@ const shareFilesFolder = async (req, res) => {
       return res.redirect(backTo);
     }
 
-    await SharedWith.create({
-      shareId: shareDoc.id,
-      userId: shareWithUserId || null,
-      groupId: shareWithGroupId || null,
-      access: sanitizedAccess,
-      sharedAt: new Date(),
-    });
+    // Only create single user share if we have a single user ID (not multiple)
+    if (actualShareWithUserId || shareWithGroupId) {
+      await SharedWith.create({
+        shareId: shareDoc.id,
+        userId: actualShareWithUserId || null,
+        groupId: shareWithGroupId || null,
+        access: sanitizedAccess,
+        sharedAt: new Date(),
+      });
+    }
 
     // Prepare recipients for email notifications
     let recipients = [];
 
-    if (shareWithUserId) {
+    if (actualShareWithUserId) {
       // Share with individual user
-      const user = await User.findByPk(shareWithUserId, {
+      const user = await User.findByPk(actualShareWithUserId, {
         attributes: ["id", "name", "email", "department"],
       });
+      console.log("userlst", user);
+
       if (user) {
         recipients.push(user);
       }
     }
 
     if (shareWithGroupId) {
-      // Share with group - get all group members
-      const groupMembers = await User.findAll({
-        attributes: ["id", "name", "email", "department"],
+      // Share with group - get members only from that group
+      const group = await CommitteeGroup.findByPk(shareWithGroupId, {
+        include: [
+          {
+            model: User,
+            as: "members", // Replace with your actual alias
+            attributes: ["id", "name", "email", "department"],
+            through: { attributes: [] }, // if using a through table
+          },
+        ],
       });
-      recipients = recipients.concat(groupMembers);
+
+      if (group && group.members) {
+        recipients = recipients.concat(group.members);
+      }
     }
 
     // Send email notifications immediately for individual/group sharing

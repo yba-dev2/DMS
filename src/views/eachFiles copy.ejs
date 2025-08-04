@@ -185,91 +185,95 @@
   </div>
 
   <!-- Share Modal -->
-  <div id="shareModal" class="modal fade modal-lg" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <form id="shareForm" method="POST" action="/folder/share">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="shareModalLabel">Share <span id="shareItemTypeText"></span></h5>
-            <button type="button" class="btn-close" aria-label="Close" id="shareModalClose"></button>
-          </div>
+ <div id="shareModal" class="modal fade modal-lg" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form id="shareForm" method="POST" action="/folder/share">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="shareModalLabel">Share <span id="shareItemTypeText"></span></h5>
+          <button type="button" class="btn-close" aria-label="Close" id="shareModalClose"></button>
+        </div>
 
-          <div class="modal-body">
-            <input type="hidden" name="id" id="shareItemId" value="" />
-            <input type="hidden" name="type" id="shareItemType" value="" />
-            <input type="hidden" name="redirectUrl" id="redirectUrlInput" value="" />
+        <div class="modal-body">
+          <input type="hidden" name="id" id="shareItemId" value="" />
+          <input type="hidden" name="type" id="shareItemType" value="" />
+          <input type="hidden" name="redirectUrl" id="redirectUrlInput" value="" />
 
-            <!-- Tabs -->
-            <ul class="nav nav-tabs" id="shareTabs" role="tablist">
-              <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual" type="button" role="tab" aria-controls="individual" aria-selected="true">Individual</button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="group-tab" data-bs-toggle="tab" data-bs-target="#group" type="button" role="tab" aria-controls="group" aria-selected="false">Group</button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="false">All</button>
-              </li>
-            </ul>
+          <!-- Tabs -->
+          <ul class="nav nav-tabs" id="shareTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual" type="button" role="tab" aria-controls="individual" aria-selected="true">Individual</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="group-tab" data-bs-toggle="tab" data-bs-target="#group" type="button" role="tab" aria-controls="group" aria-selected="false">Group</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="false">All</button>
+            </li>
+          </ul>
 
-            <div class="tab-content mt-3" id="shareTabsContent">
-              <!-- Individual Share Tab -->
-              <div class="tab-pane fade show active" id="individual" role="tabpanel" aria-labelledby="individual-tab">
-                <div class="mb-3">
-                  <label for="shareWithUserId" class="form-label">Share With User</label>
-                  <select name="shareWithUserId" id="shareWithUserId" class="form-select" required>
-                    <% (allUsers || []).forEach(function(u) { %>
-                    <option value="<%= u.id %>">
-                      <%= u.name %> - <%= u.department %>
-                    </option>
-                    <% }) %>
-                  </select>
-                </div>
-              </div>
-
-              <!-- Group Share Tab -->
-              <div class="tab-pane fade" id="group" role="tabpanel" aria-labelledby="group-tab">
-                <div class="mb-3">
-                  <label for="shareWithGroupId" class="form-label">Share With Group</label>
-                  <select name="shareWithGroupId" id="shareWithGroupId" class="form-select">
-                    <% (allgroups || []).forEach(function(g) { %>
-                    <option value="<%= g.id %>">
-                      <%= g.groupName %>
-                    </option>
-                    <% }) %>
-                  </select>
-                </div>
-              </div>
-
-              <!-- All Share Tab - MOVED INSIDE shareTabsContent -->
-              <div class="tab-pane fade" id="all" role="tabpanel" aria-labelledby="all-tab">
-                <div class="form-check mt-3">
-                  <input class="form-check-input" type="checkbox" id="shareToAll" name="shareToAll" value="true" />
-                  <label class="form-check-label" for="shareToAll">
-                    Share with all users
-                  </label>
-                </div>
+          <div class="tab-content mt-3" id="shareTabsContent">
+            <!-- Individual Share Tab -->
+            <div class="tab-pane fade show active" id="individual" role="tabpanel" aria-labelledby="individual-tab">
+              <div class="mb-3">
+                <label for="shareWithUserIds" class="form-label">Share With Users</label>
+                <select name="shareWithUserIds" id="shareWithUserIds" class="form-control" data-choices data-choices-removeItem multiple>
+                  <% (allUsers || []).forEach(function(u) { %>
+                  <option value="<%= u.id %>">
+                    <%= u.name %> - <%= u.department %>
+                  </option>
+                  <% }) %>
+                </select>
+                <small class="form-text text-muted">
+                  Select one or more users to share the Files/Folders. 
+                </small>
               </div>
             </div>
 
-            <div class="mb-3">
-              <label for="access" class="form-label">Permission Level</label>
-              <select name="access" id="access" class="form-select" required>
-                <option value="read">View & Download</option>
-                <option value="NoDownload">View & Can't Download</option>
-              </select>
+            <!-- Group Share Tab -->
+            <div class="tab-pane fade" id="group" role="tabpanel" aria-labelledby="group-tab">
+              <div class="mb-3">
+                <label for="shareWithGroupId" class="form-label">Share With Group</label>
+                <select name="shareWithGroupId" id="shareWithGroupId" class="form-select">
+                  <option value="">Select a group...</option>
+                  <% (allgroups || []).forEach(function(g) { %>
+                  <option value="<%= g.id %>">
+                    <%= g.groupName %>
+                  </option>
+                  <% }) %>
+                </select>
+              </div>
+            </div>
 
+            <!-- All Share Tab -->
+            <div class="tab-pane fade" id="all" role="tabpanel" aria-labelledby="all-tab">
+              <div class="form-check mt-3">
+                <input class="form-check-input" type="checkbox" id="shareToAll" name="shareToAll" value="true" />
+                <label class="form-check-label" for="shareToAll">
+                  Share with all users
+                </label>
+              </div>
             </div>
           </div>
 
-          <div class="modal-footer">
-            <button type="submit" class="btn btn-primary">Share</button>
-            <button type="button" class="btn btn-secondary" id="shareModalCancel">Cancel</button>
+          <div class="mb-3">
+            <label for="access" class="form-label">Permission Level</label>
+            <select name="access" id="access" class="form-select" required>
+              <option value="read">View & Download</option>
+              <option value="NoDownload">View & Can't Download</option>
+            </select>
           </div>
         </div>
-      </form>
-    </div>
+
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Share</button>
+          <button type="button" class="btn btn-secondary" id="shareModalCancel">Cancel</button>
+        </div>
+      </div>
+    </form>
   </div>
+</div>
+
 
   <!-- Manage Access Modal -->
   <div id="accessModal" class="modal" tabindex="-1" aria-labelledby="accessModalLabel" aria-hidden="true" style="display:none;">
