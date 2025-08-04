@@ -23,6 +23,8 @@ router.use((req, res, next) => {
   res.locals.messages = req.flash();
   next();
 });
+
+
 let routes = app => {
   //Auth 
   router.get("/Uploads", requireAuth, homeController.getHome); 
@@ -33,7 +35,7 @@ let routes = app => {
   // router.get('/files/:fileId',requireAuth, uploadController.getFileFromQNAP)
   router.post('/create-folder',requireAuth, uploadController.createFolder)
   router.get("/FolderList", requireAuth, uploadController.checkFolder)
-  router.get("/testcheck/:id", requireAuth, uploadController.testCheck);
+  router.get("/FolderContent/:id", requireAuth, uploadController.FolderContent);
   router.get("/view/:fileId", requireAuth, uploadController.viewFileFromQNAP);
 
   //sharing
@@ -48,13 +50,14 @@ let routes = app => {
 
   // API Autjentication
   // router.post('/api/v1/login', APIController.authLogin);
-  router.get('/', verifyTokenController.verifyToken )
+  router.get('/',verifyTokenController.verifyToken );
+       
   router.get("/logout",loginController.logout); 
   
   //add Committees
   router.post('/AddGroup', requireAuth, CommitteeController.AddGroupMembers);
-  router.get('/committees', requireAuth, CommitteeController.ViewCommittee);
-  router.get('/addCommittee', requireAuth, CommitteeController.addCommittee);
+  router.get('/ViewGroups', requireAuth, CommitteeController.ViewGroups);
+  router.get('/addGroups', requireAuth, CommitteeController.AddGroups);
   router.get('/editGroup/:id', requireAuth, CommitteeController.editGroup);
   router.post('/committee-groups/:id/edit', requireAuth, CommitteeController.postEditGroup);
   router.delete("/deleteGroup/:id", requireAuth, CommitteeController.deleteGroup)

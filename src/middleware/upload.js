@@ -1,21 +1,21 @@
 const express = require("express");
 const multer = require("multer");
 const ftp = require("basic-ftp");
-const mongoose = require("mongoose");
-const FolderModel = require("../model/File");
-const UserModel = require("../model/users");
+const mongoose = require("mongoose")
 const { Readable } = require("stream");
-const CreateFolder = require("../model/folder");
 require("dotenv").config();
+const { ftpCredentials } = require("../config/ftpCredentials");
+const { User, File, Folder, CreateFolder, Share, SharedWith, CommitteeGroup } = require('../config/dbConnector');
+
 
 const app = express();
 
 // MongoDB Connection
-const mongoURI = process.env.MONGODB_URI;
-mongoose
-  .connect(mongoURI)
-  .then(() => console.log("MongoDB connected successfully."))
-  .catch((err) => console.error("MongoDB connection error:", err));
+// const mongoURI = process.env.MONGODB_URI;
+// mongoose
+//   .connect(mongoURI)
+//   .then(() => console.log("MongoDB connected successfully."))
+//   .catch((err) => console.error("MongoDB connection error:", err));
 
 // Multer Configuration (for memory storage)
 const storage = multer.memoryStorage();
@@ -36,7 +36,7 @@ const upload = multer({
     if (!acceptedMimeTypes.includes(file.mimetype)) {
       cb(
         new Error(
-          `${file.originalname} is invalid. Only accept PDF, Word, Excel, and image files.`
+          `${file.filename} is invalid. Only accept PDF, Word, Excel, and image files.`
         ),
         false
       );
@@ -47,7 +47,6 @@ const upload = multer({
 }).any(); // Accept multiple files
 
 // Define FTP Credentials for Different QNAP Devices
-const {ftpCredentials} = require("../config/ftpCredentials")
 
 // Function to Select the Correct QNAP Device Based on Department
 const getQnapCredentials = (department) => {
@@ -100,8 +99,6 @@ const uploadFileToFTP = async (fileStream, remoteFilePath, department) => {
       remoteFilePath.lastIndexOf("/") + 1
     );
 
-    console.log("🔧 Ensuring directory path:", remoteDir);
-
     // STEP-BY-STEP navigate and ensure folders
     const folders = remoteDir.split("/");
     for (const folder of folders) {
@@ -118,7 +115,6 @@ const uploadFileToFTP = async (fileStream, remoteFilePath, department) => {
     // ⛔ DO NOT `cd` again into the full path — you're already there
 
     await client.uploadFrom(fileStream, fileName);
-    console.log(`✅ Uploaded ${fileName} to ${remoteDir}`);
     return `Uploaded to ${remoteDir}/${fileName}`;
   } catch (err) {
     console.error(`❌ Failed to upload ${remoteFilePath}:`, err);
@@ -135,89 +131,86 @@ const handleFileUpload = (req) => {
       if (err) {
         return reject(err);
       }
+      const transaction = await Folder.sequelize.transaction();
       try {
         const uploadType = req.body.uploadType;
         if (!uploadType) {
-          return reject(new Error("Upload type is missing."));
+          throw new Error("Upload type is missing.");
         }
 
         let path = req.body.path;
         path = decodeURIComponent(path);
         if (!path) {
-          return reject(new Error("Folder path is missing."));
+          throw new Error("Folder path is missing.");
         }
 
         const userId = req.session.userId;
-        const user = await UserModel.findById(userId);
+        const user = await User.findByPk(userId);
         if (!user) {
-          return reject(new Error("User not found."));
+          throw new Error("User not found.");
         }
 
-        const parentFolder = await CreateFolder.findOne({ path });
+        const parentFolder = await CreateFolder.findOne({ where: { path } });
         if (!parentFolder) {
-          return reject(new Error("Folder not found."));
+          throw new Error("Folder not found.");
         }
 
         const department = parentFolder.department;
 
-        const processFolder = async (
-          files,
-          parentPath,
-          folderName,
-          linkedFolderID
-        ) => {
-          if (!files || files.length === 0)
+        const processFolder = async (files, parentPath, folderName, linkedFolderID) => {
+          if (!files || files.length === 0) {
             throw new Error("No files to process.");
-
-          const fileData = [];
-
-          for (const file of files) {
-            const remoteFileName = `${parentPath}/${file.originalname}`;
-            try {
-              const fileStream = Readable.from(file.buffer);
-              await uploadFileToFTP(fileStream, remoteFileName, department);
-
-              fileData.push({
-                originalname: file.originalname,
-                mimetype: file.mimetype,
-                size: file.size,
-                path: remoteFileName,
-                uploadedBy: userId,
-                department: user.department,
-              });
-            } catch (err) {
-              throw new Error(`Failed to upload ${file.originalname}`);
-            }
           }
 
-          await FolderModel.create({
-            folderName,
+          // 1. Create folder entry first
+          const newFolder = await Folder.create({
+            folderName: folderName || null,
             uploadType,
             uploadedBy: userId,
-            files: fileData,
-            linkedFolder: linkedFolderID,
-          });
+            linkedFolder: linkedFolderID
+          }, { transaction });
+
+          // 2. Upload each file to FTP, then create File records
+          for (const file of files) {
+            const remoteFileName = `${parentPath}/${file.originalname}`;
+
+            // Upload to FTP (assuming uploadFileToFTP returns a Promise)
+            const fileStream = Readable.from(file.buffer);
+            await uploadFileToFTP(fileStream, remoteFileName, department);
+
+            // Create File record in DB
+            await File.create({
+              filename: file.originalname,
+              originalname: file.originalname,
+              mimetype: file.mimetype,
+              size: file.size,
+              path: remoteFileName,
+              uploadedBy: userId,
+              department: user.department,
+              folderId: newFolder.id,
+              linkedFolder: linkedFolderID
+            }, { transaction });
+          }
         };
 
         if (uploadType === "Folder") {
           const folderName = req.body.folderName;
           const folderPath = `${path}/${folderName}`;
-          await processFolder(
-            req.files,
-            folderPath,
-            folderName,
-            parentFolder._id
-          );
+          await processFolder(req.files, folderPath, folderName, parentFolder.id);
         } else {
-          await processFolder(req.files, path, "", parentFolder._id);
+          await processFolder(req.files, path, null, parentFolder.id);
         }
 
-        resolve(parentFolder._id); // success
+        await transaction.commit();
+        resolve(parentFolder.id); // success
       } catch (error) {
+        await transaction.rollback();
         reject(error);
       }
     });
   });
 };
+
+
 
 module.exports = handleFileUpload;

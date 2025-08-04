@@ -49,7 +49,7 @@
                 <input type="search" class="form-control" id="search" placeholder="Search groups...">
               </div>
               <div class="dropdown">
-                <a href="/addCommittee" class="btn btn-sm btn-primary">
+                <a href="/AddGroups" class="btn btn-sm btn-primary">
                   Add Group
                 </a>
               </div>
@@ -71,7 +71,7 @@
                   <tr class="group-row">
                     <td><%= index + 1 %></td>
                     <td><%= group.groupName %></td>
-                    <td><%= group.memberSecretary?.name %></td>
+                    <td><%= group.secretary?.name %></td>
                     <td>
                       <ul class="mb-0">
                         <% group.members.forEach(member => { %>
@@ -81,13 +81,18 @@
                     </td>
                     <td>
                       <div class="d-flex gap-2">
-                        <% if (currentUserId && group.memberSecretary && group.memberSecretary._id.toString() === currentUserId.toString()) { %>
+                        <% if (
+            currentUserId &&
+            group.secretary &&
+            group.secretary.id &&
+            group.secretary.id.toString() === currentUserId.toString()
+          ) { %>
                         <!-- Edit button - only visible to group leader -->
-                        <a href="/editGroup/<%= group._id %>" class="btn btn-soft-secondary btn-sm">
+                        <a href="/editGroup/<%= group.id %>" class="btn btn-soft-secondary btn-sm">
                           <iconify-icon icon="cuida:edit-outline" class="align-middle fs-18"></iconify-icon>
                         </a>
                         <!-- Delete button - only visible to group leader -->
-                        <button onclick="deleteGroup('<%= group._id %>', '<%= group.groupName %>')" class="btn btn-soft-danger btn-sm" type="button">
+                        <button onclick="deleteGroup('<%= group.id %>', '<%= group.groupName %>')" class="btn btn-soft-danger btn-sm" type="button">
                           <iconify-icon icon="solar:trash-bin-minimalistic-2-broken" class="align-middle fs-18"></iconify-icon>
                         </button>
                         <% } else { %>
@@ -102,6 +107,7 @@
                     <td colspan="5" class="text-center">No groups found.</td>
                   </tr>
                 </tbody>
+
               </table>
             </div>
             <div class="card-footer border-top">
@@ -120,7 +126,7 @@
       </div>
     </div>
   </div>
-<!-- Search Functionality  -->
+  <!-- Search Functionality  -->
   <script>
     document.addEventListener("DOMContentLoaded", function() {
       const searchInput = document.getElementById("search");

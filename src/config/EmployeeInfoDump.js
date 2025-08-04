@@ -1,42 +1,52 @@
-const mongoose = require('mongoose');
-const axios = require('axios');
-const User = require('../model/users'); // Adjust path
+const fs = require('fs');
+const path = require('path');
+const { Sequelize, DataTypes } = require('sequelize');
 
-mongoose.connect('mongodb+srv://bilit:dms@cluster0.ex4vfs0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0');
+const sequelize = new Sequelize('DMS', 'sa', 'p1ne@pple', {
+  host: '172.16.16.188',
+  port: 4433,
+  dialect: 'mssql',
+  dialectOptions: {
+    options: {
+      encrypt: true,
+      trustServerCertificate: true
+    }
+  },
+  logging: false
+});
+
+// Import your User model
+const defineUserModel = require('../model/users'); // Adjust path
+const User = defineUserModel(sequelize, DataTypes);
 
 async function importFromAPI() {
   try {
-    const res = await axios.get('http://172.16.40.36:8000/api/allemployee');
-    const employees = res.data.data;
+    await sequelize.authenticate();
+    console.log("✅ MSSQL connection successful.");
 
-    if (!Array.isArray(employees)) {
-      throw new Error('API did not return an array');
+    const filePath = path.join(__dirname, './employees.json');
+    const rawData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+    if (!Array.isArray(rawData)) {
+      throw new Error('JSON must be an array of employee objects');
     }
 
-    const cleanEmployees = employees.filter(emp => emp.employee_id);
+    // Map snake_case keys to camelCase keys
+    const formattedData = rawData.map(emp => ({
+      employeeId: emp.employee_id,
+      name: emp.name,
+      email: emp.email,
+      employeeCode: emp.employee_code,
+      department: emp.department
+    }));
 
-    for (const emp of cleanEmployees) {
-      // Rename fields here
-      const doc = {
-        employeeId: emp.employee_id,    // renamed
-        name: emp.name,
-        email: emp.email,
-        employee_code: emp.employee_code,
-        department: emp.department,    // renamed
-      };
+    await User.bulkCreate(formattedData);
 
-      await User.updateOne(
-        { employeeId: emp.employee_id }, // match by renamed key!
-        { $set: doc },
-        { upsert: true }
-      );
-    }
+    console.log(`✅ Imported ${formattedData.length} employees successfully.`);
 
-    console.log(`✅ Upserted ${cleanEmployees.length} employees successfully.`);
+    await sequelize.close();
   } catch (err) {
-    console.error('❌ Error importing employees:', err.message);
-  } finally {
-    mongoose.connection.close();
+    console.error('❌ Error importing employees:', err);
   }
 }
 

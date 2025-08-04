@@ -80,27 +80,38 @@
                     <td><%= index + 1 %></td>
 
                     <td>
-                      <iconify-icon icon="<%= getFileIcon(file.originalname) %>"></iconify-icon>
+                      <iconify-icon icon="<%= getFileIcon(file.filename) %>"></iconify-icon>
 
-                      <a href="/files/<%= file._id %>" target="_blank"><%= file.originalname %></a>
+                      <a href="/files/<%= file.id %>" target="_blank"><%= file.filename %></a>
                     </td>
-                    <td><%= new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(file.date)) %></td>
-                    <td><%= file.uploadedBy ? file.uploadedBy.name : 'Unknown' %></td>
+
+                    <td> <%= new Date(file.date).toLocaleString("en-GB", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }) %></td>
+
+                    <!-- Access name and department from uploadedBy -->
+                    <td><%= file.uploader ? file.uploader.name : "N/A" %></td>
                     <td><%= formatFileSize(file.size) %></td>
-                    <td><%= file.uploadedBy ? file.uploadedBy.department : 'Unknown' %></td>
+                    <td><%= file.uploader ? file.uploader.department : "N/A" %></td>
+
                     <td>
                       <div class="d-flex gap-2">
                         <a href="#!" class="btn btn-light btn-sm">
                           <iconify-icon icon="solar:eye-broken" class="align-middle fs-18"></iconify-icon>
                         </a>
-                        <a href="/view/<%= file._id %>" class="btn btn-soft-success btn-sm" title="Download">
+                        <a href="/view/<%= file.id %>" class="btn btn-soft-success btn-sm" title="Download">
                           <iconify-icon icon="solar:download-minimalistic-line-duotone" class="align-middle fs-18"></iconify-icon>
-                        </a>                          
+                        </a>
                       </div>
                     </td>
                   </tr>
                   <% }); %>
                 </tbody>
+
               </table>
             </div>
 

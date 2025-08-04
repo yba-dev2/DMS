@@ -2,46 +2,43 @@ const express = require("express");
 const app = express();
 const path = require("path");
 const cookieParser = require('cookie-parser');
-const helmet = require("helmet")
+const helmet = require("helmet");
 const rateLimit = require('express-rate-limit');
-const compression = require("compression")
-const morgan = require("morgan")
-const session = require('express-session');
-app.use(cookieParser());
+const compression = require("compression");
+const morgan = require("morgan");
 const initRoutes = require("./routes/web");
+const db  = require('./config/dbConnector'); 
+const sequelize = db.sequelize;
 
-//middlerware for forms and json
+app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-
-//middleware for rate-limiting
-// app.use(rateLimit({ windowMs: 12 * 60 * 1000, max: 100 }));
-
+app.use(rateLimit({ windowMs: 12 * 60 * 1000, max: 100 }));
 app.use(compression());
-app.use(morgan("dev"));
+// app.use(morgan("dev"));
 app.use("/assets", express.static(path.join(__dirname, "public/assets")));
+app.use('/pdfjs', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
 
-//View engine setup
+// View engine
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
-app.use('/pdfjs', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
-app.set('trust proxy', true);
-
-app.use(session({
-  secret: process.env.SECRET,
-  resave: false,
-  saveUninitialized: false, // better for security
-  cookie: {
-    secure: true, // set true if behind HTTPS (in production)
-    httpOnly: true,
-    maxAge: 60 * 60 * 1000 // 1 hour
-  }
-}));
-//initialize routes
+// Initialize routes
 initRoutes(app);
 
-let port = process.env.PORT;
-app.listen(port, () => {
-  console.log(`Running at https://dms.bil.local${port}`);
-});
+// Connect to DB, then start server
+sequelize.authenticate()
+  .then(() => {
+    console.log("✅ MSSQL connected using Sequelize");
+
+    return sequelize.sync(); // Sync models with DB
+  })
+  .then(() => {
+    const port = process.env.PORT || 3030;
+    app.listen(port, () => {
+      console.log(`🚀 Server running at http://172.16.40.91:${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ Could not start server due to DB connection error:", err);
+  });

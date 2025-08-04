@@ -1,63 +1,108 @@
-const UserModel = require("../model/users");
-const CommitteeGroup = require("../model/Committee");
+const { Sequelize } = require("sequelize");
+const { User,  CommitteeGroup} = require("../config/dbConnector");
 
-const addCommittee = async (req, res) => {
-  const allUsers = await UserModel.find({}).select("user name department");
-  const user = req.session.userId
-    ? UserModel.findById(req.session.userId)
-    : null;
-  res.render("Committe", { user, allUsers, message: null });
+const AddGroups = async (req, res) => {
+  try {
+    // Fetch all users, selecting id, name, department
+    const allUsers = await User.findAll({
+      attributes: ['id', 'name', 'department'],
+    });
+
+    // Fetch logged-in user by session userId, if exists
+    const user = req.session.userId
+      ? await User.findByPk(req.session.userId)
+      : null;
+
+    // Render the view with data
+    res.render('Committe', { user, allUsers, message: null });
+  } catch (error) {
+    console.error('Error in groups:', error);
+    res.status(500).send('Internal Server Error');
+  }
 };
 
+// Function To add Groups 
 const AddGroupMembers = async (req, res) => {
   try {
     let { groupName, memberSecretary, members } = req.body;
-    // Ensure members is always an array
-    if (!Array.isArray(members)) members = [members];
-    const user = await UserModel.findById(req.session.userId);
 
-    const existingGroup = await CommitteeGroup.findOne({ groupName });
+    // Ensure members is always an array
+    if (!Array.isArray(members)) {
+      members = [members];
+    }
+
+    // Check if the group already exists
+    const existingGroup = await CommitteeGroup.findOne({ where: { groupName } });
     if (existingGroup) {
       req.flash("success", "Group or Committee Already Exists.");
-      return res.redirect("/addCommittee");
+      return res.redirect("/groups");
     }
-    // Validate presence
+
+    // Validate required fields
     if (!groupName || !memberSecretary || members.length === 0) {
       return res.status(400).send("All fields are required");
     }
 
-    const newCommittee = new CommitteeGroup({
+    // Create the new committee group
+    const newCommittee = await CommitteeGroup.create({
       groupName,
-      memberSecretary,
-      members,
+      memberSecretary: memberSecretary, // matches your model definition
     });
-    await newCommittee.save();
-    res.redirect("/committees");
+
+    // Associate users as members via the many-to-many relationship
+    await newCommittee.setMembers(members); // This populates the junction table
+
+    res.redirect("/ViewGroups");
   } catch (error) {
     console.error("Error creating committee:", error);
     res.status(500).send("Internal Server Error");
   }
 };
 
-const ViewCommittee = async (req, res) => {
+
+
+const ViewGroups = async (req, res) => {
   try {
-    const user = await UserModel.findById(req.session.userId);
-    const allUsers = await UserModel.find({}).select("user name");
-    const groups = await CommitteeGroup.find()
-      .populate("memberSecretary", "name department")
-      .populate("members", "name department");
-         
-    res.render("ViewGroups", {
+    // 1. Get logged-in user
+    const user = req.session.userId
+      ? await User.findByPk(req.session.userId)
+      : null;
+
+    // 2. Get all users with selected fields
+    const allUsers = await User.findAll({
+      attributes: ['id', 'name']
+    });
+
+    // 3. Get all committee groups with memberSecretary and members populated
+    const groups = await CommitteeGroup.findAll({
+      include: [
+        {
+          model: User,
+          as: 'secretary',
+          attributes: ['id', 'name', 'department'],
+        },
+        {
+          model: User,
+          as: 'members',
+          attributes: ['id', 'name', 'department'],
+          
+        },
+      ],
+    });
+
+    // 4. Render the view
+    res.render('ViewGroups', {
       user: user || null,
       groups: groups || [],
       allUsers: allUsers || [],
-      currentUserId: req.session.userId // Pass current user ID to template
+      currentUserId: req.session.userId,
     });
   } catch (error) {
-    console.error("Error fetching groups:", error);
-    res.status(500).send("Internal Server Error");
+    console.error('Error fetching groups:', error);
+    res.status(500).send('Internal Server Error');
   }
 };
+
 
 //Edit Group Name
 const editGroup = async (req, res) => {
@@ -71,7 +116,7 @@ const editGroup = async (req, res) => {
     if (!group) {
       return res.status(404).send("Group not found");
     }
-    const users = await UserModel.find();
+    const users = await User.find();
     // Check if current user is the group leader
     if (group.memberSecretary._id.toString() !== user.toString()) {
       return res.status(403).send("Access denied. Only group leader can edit this group.");
@@ -168,8 +213,8 @@ const deleteGroup = async (req, res) => {
 };
 module.exports = {
   AddGroupMembers,
-  addCommittee,
-  ViewCommittee,
+  AddGroups,
+  ViewGroups,
   editGroup,
   postEditGroup,
   deleteGroup

@@ -1,13 +1,19 @@
 const handleFileUpload = require("../middleware/upload");
-const FolderModel = require("../model/File");
-const UserModel = require("../model/users");
 const ftp = require("basic-ftp");
-const CommitteeGroup = require("../model/Committee");
 require("dotenv").config();
-const Folder = require("../model/folder");
 const mime = require("mime-types");
-const Share = require("../model/share");
-const stream = require("stream");
+const { Sequelize } = require("sequelize");
+const {
+  User,
+  File,
+  Folder,
+  CreateFolder,
+  Share,
+  SharedWith,
+  CommitteeGroup,
+  DownloadedBy
+} = require("../config/dbConnector");
+const Op = Sequelize.Op;
 
 const ftpCredentials = {
   Finance: {
@@ -194,7 +200,7 @@ const multipleUpload = async (req, res) => {
     const path = encodeURIComponent(req.body.path);
 
     // Construct URL with folderID and path query param
-    const dynamicURL = `/testcheck/${folderID}?path=${path}`;
+    const dynamicURL = `/FolderContent/${folderID}?path=${path}`;
     return res.redirect(dynamicURL);
   } catch (error) {
     console.error(error);
@@ -218,15 +224,15 @@ const formatFileSize = (size) => {
 };
 
 // for files counnt
-const countFolder = () => {
-  const count = 0;
-  const folderData = FolderModel.find();
-  folderData.forEach((folderElement) => {
-    if (folderElement.uploadType == "Folder") {
-      count++;
+const countFolders = async () => {
+  const count = await Folder.count({
+    where: {
+      uploadType: 'Folder'
     }
   });
+  return count;
 };
+
 function getFileIcon(fileName) {
   const ext = fileName.split(".").pop().toLowerCase();
   switch (ext) {
@@ -321,32 +327,52 @@ const getScan = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-
 const getFolderContents = async (req, res) => {
   try {
     // Pagination parameters
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    const totalItems = await FolderModel.countDocuments();
+    const offset = (page - 1) * limit;
 
     const loggedInUserId = req.session.userId;
-    const user = await UserModel.findById(loggedInUserId);
+
+    const user = await User.findByPk(loggedInUserId);
     if (!user) {
       req.flash("error", "User not found.");
       return res.redirect("/upload");
     }
 
     const folderId = req.params.folderId;
-    const folder = await FolderModel.findById(folderId)
-      .skip(skip)
-      .limit(limit)
-      .populate("uploadedBy", "ame department")
-      .populate("files.uploadedBy", "name department");
-    // console.log(folder);
+
+    // Get folder
+    const folder = await Folder.findByPk(folderId, {
+      include: [
+        {
+          model: File,
+          as: "files",
+          include: [
+            {
+              model: User,
+              as: "uploader", // Use the alias if you have one in the association
+              attributes: ["name", "department"],
+            },
+          ],
+          offset,
+          limit,
+        },
+        {
+          model: User,
+          as: "uploader", // Alias for who uploaded the folder
+          attributes: ["name", "department"],
+        },
+      ],
+    });
+
     if (!folder) {
       return res.status(404).render("error", { message: "Folder not found" });
     }
+
+    const totalItems = await File.count({ where: { folderId: folderId } });
 
     res.render("eachFiles.ejs", {
       folder,
@@ -362,6 +388,7 @@ const getFolderContents = async (req, res) => {
   }
 };
 
+//creating a folder root
 const createFolder = async (req, res) => {
   const client = new ftp.Client();
   client.ftp.verbose = true;
@@ -389,14 +416,13 @@ const createFolder = async (req, res) => {
         .json({ error: "Unauthorized: User not logged in." });
     }
 
-    const user = await UserModel.findById(loggedInUserId);
+    const user = await User.findByPk(loggedInUserId);
     if (!user) {
       return res.status(404).json({ error: "User not found." });
     }
 
     const department = user.department;
-    console.log(department);
-    
+
     const ftpConfig = ftpCredentials[department];
     if (!ftpConfig) {
       return res.status(404).json({ error: "Department not configured." });
@@ -407,13 +433,12 @@ const createFolder = async (req, res) => {
     // Ensure the directory exists
     const folderPath = `${department}/${sanitizedFolderName}`;
     await client.ensureDir(folderPath);
-
-    console.log(
-      `✅ Folder '${sanitizedFolderName}' created successfully in ${department}.`
-    );
+    // console.log(
+    //   `✅ Folder '${sanitizedFolderName}' created successfully in ${department}.`
+    // );
 
     // Save folder in MongoDB
-    const newFolder = new Folder({
+    const newFolder = new CreateFolder({
       folderName: sanitizedFolderName,
       createdBy: loggedInUserId,
       department,
@@ -445,26 +470,38 @@ const checkFolder = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = 10;
-    const skip = (page - 1) * limit;
-    const totalItems = await FolderModel.countDocuments();
+    const offset = (page - 1) * limit;
 
+    // Count total folders
+    const totalItems = await CreateFolder.count();
+
+    // Get logged-in user
     const loggedInUserId = req.session.userId;
-    const user = await UserModel.findById(loggedInUserId);
+    const user = await User.findByPk(loggedInUserId);
     if (!user) {
       req.flash("error", "User not found.");
       return res.redirect("/upload");
     }
 
-    const folders = await Folder.find({
-      $or: [{ createdBy: loggedInUserId }],
-    })
-      .populate("createdBy", "name department")
-      .skip(skip)
-      .limit(limit);
+    // Get folders created by logged-in user with pagination
+    const folders = await CreateFolder.findAll({
+      where: {
+        createdBy: loggedInUserId,
+      },
+      include: [
+        {
+          model: User,
+          as: "creator", // adjust alias based on your association setup
+          attributes: ["name", "department"],
+        },
+      ],
+      offset,
+      limit,
+    });
 
     const totalPages = Math.ceil(totalItems / limit);
 
-    return res.render("check", {
+    return res.render("viewCreatedFolder", {
       limit,
       folders,
       currentPage: page,
@@ -473,182 +510,309 @@ const checkFolder = async (req, res) => {
       user,
     });
   } catch (err) {
-    console.error("Error fetching files:", err);
+    console.error("Error fetching folders:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-const testCheck = async (req, res) => {
+const FolderContent = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = 10;
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    const totalItems = await FolderModel.countDocuments();
     const folderId = req.params.id;
 
-    const allUsers = await UserModel.find({}).select("user name department");
-    const allgroups = await CommitteeGroup.find({}).select("groupName");
+    // Fetch all users and groups for the view (optional)
+    const allUsers = await User.findAll({
+      attributes: ["id", "name", "department"],
+    });
 
+    const allgroups = await CommitteeGroup.findAll({
+      attributes: ["id", "groupName"],
+    });
+
+    // Get logged-in user info
     const loggedInUserId = req.session.userId;
-    const user = await UserModel.findById(loggedInUserId);
+    const user = await User.findByPk(loggedInUserId);
     if (!user) {
       req.flash("error", "User not found.");
       return res.redirect("/upload");
     }
 
-    const parentFolder = await Folder.findById(folderId);
-    if (!parentFolder) return res.status(404).send("Folder not found");
+    // Check if parent folder exists (CreateFolder model)
+    const parentFolder = await CreateFolder.findByPk(folderId);
+    if (!parentFolder) {
+      return res.status(404).send("Folder not found");
+    }
 
-    // 1. Get child folders with files
-    const folders = await FolderModel.find({ linkedFolder: parentFolder._id })
-      .skip(skip)
-      .limit(limit)
-      .populate("uploadedBy")
-      .populate("files.uploadedBy")
-      .lean();
-
-    // 2. Get all shares for this parent folder's children
-    const folderIds = folders.map((f) => f._id);
-    const fileIds = folders.flatMap((f) => f.files.map((file) => file._id));
-
-    const shares = await Share.find({
-      $or: [{ folderId: { $in: folderIds } }, { fileId: { $in: fileIds } }],
-    })
-      .populate("sharedWith.userId")
-      .populate("sharedWith.groupId")
-      .lean();
-
-    // 3. Attach sharing info to folders and files
-    folders.forEach((folder) => {
-      const shareEntry = shares.find(
-        (s) => s.folderId?.toString() === folder._id.toString()
-      );
-      folder.sharedWith = shareEntry ? shareEntry.sharedWith : [];
-
-      folder.files = folder.files.map((file) => {
-        const fileShare = shares.find(
-          (s) => s.fileId?.toString() === file._id.toString()
-        );
-        file.sharedWith = fileShare ? fileShare.sharedWith : [];
-        return file;
+    // 1. Fetch child folders linked to parent folder (paginated)
+    const { rows: childFolders, count: totalChildFolders } =
+      await Folder.findAndCountAll({
+        where: { linkedFolder: folderId },
+        offset,
+        limit,
+        include: [
+          {
+            model: User,
+            as: "uploader",
+            attributes: ["id", "name", "department"],
+          },
+        ],
+        order: [["id", "ASC"]],
       });
+
+    // 2. Separate real folders and file-wrapper folders
+    const realChildFolders = childFolders.filter(
+      (f) => f.uploadType === "Folder" && f.folderName !== null
+    );
+
+    const fileWrapperFolders = childFolders.filter(
+      (f) => f.uploadType === "Files" && f.folderName === null
+    );
+
+    // 3. For each wrapper folder, fetch its files (files linked by folderId)
+    // We do this here instead of eager loading, since files are only in File model
+    // Using Promise.all to fetch files of all wrappers in parallel
+    const filesFromFileWrappers = (
+      await Promise.all(
+        fileWrapperFolders.map(async (folder) => {
+          const files = await File.findAll({
+            where: { folderId: folder.id },
+            include: [
+              {
+                model: User,
+                as: "uploader",
+                attributes: ["id", "name", "department"],
+              },
+            ],
+            attributes: [
+              "id",
+              "filename",
+              "folderId",
+              "uploadedBy",
+              "size",
+              "date",
+            ],
+            order: [["id", "ASC"]],
+          });
+
+          // Add wrapper folder name to each file
+          files.forEach((file) => {
+            file.dataValues.parentWrapperName = folder.folderName;
+          });
+
+          return files;
+        })
+      )
+    ).flat();
+    // 4. Fetch files uploaded directly to the parent folder (folderName=null)
+    // Files where linkedFolder = parent folderId and folder's folderName = null and uploadType = 'File'
+    const directUploadFiles = await File.findAll({
+      where: { linkedFolder: folderId },
+      include: [
+        {
+          model: Folder,
+          as: "folder",
+          where: {
+            folderName: null,
+            uploadType: "File",
+          },
+          attributes: ["id", "folderName", "uploadType"],
+        },
+        {
+          model: User,
+          as: "uploader",
+          attributes: ["id", "name", "department"],
+        },
+      ],
+      order: [["id", "ASC"]],
     });
 
+    // Tag direct upload files
+    directUploadFiles.forEach((file) => {
+      file.dataValues.parentWrapperName = "Direct Upload";
+    });
+
+    // 5. Combine all files to render
+    const allFilesToRender = [...filesFromFileWrappers, ...directUploadFiles];
+
+    // 6. Prepare IDs for sharing lookup
+    const folderIds = childFolders.map((f) => f.id);
+    const fileIds = allFilesToRender.map((f) => f.id);
+
+    // 7. Fetch shares for folders and files
+    const shares = await Share.findAll({
+      where: {
+        [Sequelize.Op.or]: [
+          { folderId: folderIds.length ? folderIds : null },
+          { fileId: fileIds.length ? fileIds : null },
+        ],
+      },
+      include: [
+        { model: User, as: "sharer" },
+        { model: SharedWith, as: "sharedWith" }, // include sharedWith to know share details
+      ],
+    });
+
+    // Attach sharing info and status to folders
+
+    childFolders.forEach((folder) => {
+      const shareEntry = shares.find(
+        (s) => String(s.folderId) === String(folder.id)
+      );
+      folder.sharedWith = shareEntry ? shareEntry.sharedWith : [];
+      folder.sharingStatus = shareEntry ? "Sharing" : "Private";
+    });
+
+    // Attach sharing info and status to files
+    allFilesToRender.forEach((file) => {
+      const fileShare = shares.find(
+        (s) => String(s.fileId) === String(file.id)
+      );
+      file.sharedWith = fileShare ? fileShare.sharedWith : [];
+      file.sharingStatus = fileShare ? "Sharing" : "Private";
+    });
+
+    // 10. Prepare final object for rendering
+    const folder = {
+      id: parentFolder.id,
+      folderName: parentFolder.folderName,
+      Folders: realChildFolders,
+      Files: allFilesToRender,
+    };
+
+    // 11. Render the view
     res.render("eachFiles copy.ejs", {
-      folder: folders,
+      folder,
       getFileIcon,
       formatFileSize,
+      shares,
       user,
       allUsers,
       allgroups,
       currentPage: page,
-      totalPages: Math.ceil(totalItems / limit),
+      totalPages: Math.ceil(totalChildFolders / limit),
       userSessionId: req.session.userId,
     });
   } catch (err) {
-    console.error("❌ Error in testCheck:", err);
+    console.error("❌ Error in FolderContent:", err);
     res.status(500).send("Internal server error");
   }
 };
-
+//log the donwload who ever download the files
 const logDownload = async (fileId, userId) => {
   try {
-    // First try: Look for Share with fileId
-    let share = await Share.findOne({ fileId });
-    if (share) {
-      return;
-    }
+    // Try to find Share by fileId
+    let share = await Share.findOne({ where: { fileId } });
 
-    // If not found by fileId, try finding folder that contains the fileId
     if (!share) {
-      const folderDoc = await FolderModel.findOne({ "files._id": fileId });
-      if (!folderDoc) {
-        return;
-      }
+      // Find Folder containing the file
+      const folder = await Folder.findOne({
+        include: [{
+          model: File,
+          as: 'files',
+          where: { id: fileId },
+        }]
+      });
 
-      // Now try finding Share by folderId
-      share = await Share.findOne({ folderId: folderDoc._id });
-      if (!share) {
-        return;
-      }
+      if (!folder) return;
+
+      // Find Share by folderId
+      share = await Share.findOne({ where: { folderId: folder.id } });
+      if (!share) return;
     }
-    // Log download only if not already logged
-    const alreadyLogged = share.downloadedBy.some(
-      (entry) => entry.userId.toString() === userId.toString()
-    );
 
-    if (!alreadyLogged) {
-      share.downloadedBy.push({ userId, downloadedAt: new Date() });
-      await share.save();
-    } else {
-      return;
+    // Check if DownloadedBy record exists for this shareId and userId
+    const existingLog = await DownloadedBy.findOne({
+      where: {
+        shareId: share.id,
+        userId: userId,
+      }
+    });
+
+    if (!existingLog) {
+      // Create a new DownloadedBy record
+      await DownloadedBy.create({
+        shareId: share.id,
+        userId,
+        downloadedAt: new Date()
+      });
     }
   } catch (err) {
     console.error("🔥 Error logging download:", err);
   }
 };
 
+//function to view the files or downlaod form qnap 
 const viewFileFromQNAP = async (req, res) => {
   const fileId = req.params.fileId;
   const loggedInUserId = req.session.userId;
   const client = new ftp.Client();
 
+  // Detect if client aborted the request early (closed tab, etc)
+  req.on("close", () => {
+    console.log("Client aborted the request.");
+    client.close(); // make sure to close FTP client to free resources
+  });
+
   try {
-    const user = await UserModel.findById(loggedInUserId);
+    const user = await User.findByPk(loggedInUserId);
     if (!user) return res.status(404).send("User not found");
 
     const department = user.department;
     const ftpConfig = ftpCredentials[department];
     if (!ftpConfig) return res.status(404).send("Department not configured");
 
-    const folder = await FolderModel.findOne({ "files._id": fileId }).populate(
-      "linkedFolder"
-    );
-    if (!folder) return res.status(404).send("File not found in database");
+    const file = await File.findOne({
+      where: { id: fileId },
+      include: [
+        { model: Folder, as: "folder" },
+        { model: CreateFolder, as: "linkedFolderRef" },
+      ],
+    });
 
-    const file = folder.files.id(fileId);
-    if (!file) return res.status(404).send("File not found");
-
-    // Log the download
-    await logDownload(file._id, loggedInUserId);
-
-    // Construct full path: /<linkedFolder.path>/<folder.folderName>/<file.originalname>
-    const folderPath = `${folder.linkedFolder?.path || ""}/${
-      folder.folderName || ""
-    }`.replace(/\/+/g, "/");
+    if (!file) return res.status(404).send("File not found in database");
+    await logDownload(file.id, loggedInUserId);
+    const folderPath = `${file.linkedFolderRef?.path || ""}/${file.folder?.folderName || ""}`
+      .replace(/\/+/g, "/")
+      .trim();
 
     if (!folderPath) return res.status(500).send("Folder path missing");
 
-    const remoteFilePath = `/${folderPath}/${file.originalname}`
-      .replace(/\/+/g, "/")
-      .trim();
-    console.log(`Downloading file: ${remoteFilePath}`);
+    const remoteFilePath = `/${folderPath}/${file.filename}`.replace(/\/+/g, "/").trim();
 
-    const mimeType =
-      mime.lookup(file.originalname) || "application/octet-stream";
+    const mimeType = mime.lookup(file.filename) || "application/octet-stream";
     res.setHeader("Content-Type", mimeType);
-    res.setHeader(
-      "Content-Disposition",
-      `inline; filename="${file.originalname}"`
-    );
+
+    // For PDFs, open inline in browser
+    if (mimeType === "application/pdf") {
+      res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
+    } else {
+      // For others, force download
+      res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    }
 
     await client.access(ftpConfig);
     await client.downloadTo(res, remoteFilePath);
   } catch (err) {
-    console.error("Error retrieving file:", err);
-    if (!res.headersSent) res.status(500).send("Internal Server Error");
+    // Ignore stream premature close errors (common when client closes tab)
+    if (err.code === "ERR_STREAM_PREMATURE_CLOSE") {
+      // console.log("Stream closed prematurely by client, ignoring...");
+    } else {
+      console.error("Error retrieving file:", err);
+      if (!res.headersSent) res.status(500).send("Internal Server Error");
+    }
   } finally {
     client.close();
   }
 };
-
 module.exports = {
   multipleUpload,
   getScan,
   getFolderContents,
   createFolder,
   checkFolder,
-  testCheck,
+  FolderContent,
   viewFileFromQNAP,
 };
