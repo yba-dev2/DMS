@@ -59,22 +59,25 @@ const AddGroupMembers = async (req, res) => {
   }
 };
 
-
-
 const ViewGroups = async (req, res) => {
   try {
-    // 1. Get logged-in user
+    // 1. Pagination setup
+    const page = parseInt(req.query.page) || 1;
+    const limit = 3;
+    const offset = (page - 1) * limit;
+
+    // 2. Get logged-in user
     const user = req.session.userId
       ? await User.findByPk(req.session.userId)
       : null;
 
-    // 2. Get all users with selected fields
+    // 3. Get all users (for use in dropdowns, modals, etc.)
     const allUsers = await User.findAll({
       attributes: ['id', 'name']
     });
 
-    // 3. Get all committee groups with memberSecretary and members populated
-    const groups = await CommitteeGroup.findAll({
+    // 4. Get paginated committee groups
+    const { count, rows: groups } = await CommitteeGroup.findAndCountAll({
       include: [
         {
           model: User,
@@ -85,23 +88,30 @@ const ViewGroups = async (req, res) => {
           model: User,
           as: 'members',
           attributes: ['id', 'name', 'department'],
-          
+          through: { attributes: [] }, // Optional: hide join table data
         },
       ],
+      limit,
+      offset,
+      distinct: true, // Important to get correct count when using include
     });
 
-    // 4. Render the view
+    // 5. Render the view
     res.render('ViewGroups', {
       user: user || null,
       groups: groups || [],
       allUsers: allUsers || [],
       currentUserId: req.session.userId,
+      currentPage: page,
+      totalPages: Math.ceil(count / limit),
+      limit,
     });
   } catch (error) {
     console.error('Error fetching groups:', error);
     res.status(500).send('Internal Server Error');
   }
 };
+
 
 
 //Edit Group Name

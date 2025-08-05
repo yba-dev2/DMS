@@ -61,7 +61,7 @@
                 <input type="search" class="form-control" id="search" placeholder="Search files & folders...">
               </div>
               <button type="button" class="btn btn-sm btn-primary" id="uploadNewBtn">
-                 <iconify-icon icon="ic:baseline-add"></iconify-icon>
+                <iconify-icon icon="ic:baseline-add"></iconify-icon>
                 Upload New
               </button>
             </div>
@@ -168,16 +168,37 @@
             </div>
 
             <div class="card-footer border-top">
-              <nav aria-label="Page navigation example">
+              <nav aria-label="Page navigation">
                 <ul class="pagination justify-content-end mb-0">
-                  <li class="page-item"><a class="page-link" href="javascript:void(0);">Previous</a></li>
-                  <li class="page-item active"><a class="page-link" href="javascript:void(0);">1</a></li>
-                  <li class="page-item"><a class="page-link" href="javascript:void(0);">2</a></li>
-                  <li class="page-item"><a class="page-link" href="javascript:void(0);">3</a></li>
-                  <li class="page-item"><a class="page-link" href="javascript:void(0);">Next</a></li>
+                  <% if (currentPage > 1) { %>
+                  <li class="page-item">
+                    <a class="page-link" href="?page=<%= currentPage - 1 %>&limit=10">Previous</a>
+                  </li>
+                  <% } else { %>
+                  <li class="page-item disabled">
+                    <a class="page-link" href="#">Previous</a>
+                  </li>
+                  <% } %>
+
+                  <% for (let i = 1; i <= totalPages; i++) { %>
+                  <li class="page-item <%= i === currentPage ? 'active' : '' %>">
+                    <a class="page-link" href="?page=<%= i %>&limit=10"><%= i %></a>
+                  </li>
+                  <% } %>
+
+                  <% if (currentPage < totalPages) { %>
+                  <li class="page-item">
+                    <a class="page-link" href="?page=<%= currentPage + 1 %>&limit=10">Next</a>
+                  </li>
+                  <% } else { %>
+                  <li class="page-item disabled">
+                    <a class="page-link" href="#">Next</a>
+                  </li>
+                  <% } %>
                 </ul>
               </nav>
             </div>
+
           </div>
         </div>
       </div>
@@ -185,94 +206,94 @@
   </div>
 
   <!-- Share Modal -->
- <div id="shareModal" class="modal fade modal-lg" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <form id="shareForm" method="POST" action="/folder/share">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="shareModalLabel">Share <span id="shareItemTypeText"></span></h5>
-          <button type="button" class="btn-close" aria-label="Close" id="shareModalClose"></button>
-        </div>
+  <div id="shareModal" class="modal fade modal-lg" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <form id="shareForm" method="POST" action="/folder/share">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="shareModalLabel">Share <span id="shareItemTypeText"></span></h5>
+            <button type="button" class="btn-close" aria-label="Close" id="shareModalClose"></button>
+          </div>
 
-        <div class="modal-body">
-          <input type="hidden" name="id" id="shareItemId" value="" />
-          <input type="hidden" name="type" id="shareItemType" value="" />
-          <input type="hidden" name="redirectUrl" id="redirectUrlInput" value="" />
+          <div class="modal-body">
+            <input type="hidden" name="id" id="shareItemId" value="" />
+            <input type="hidden" name="type" id="shareItemType" value="" />
+            <input type="hidden" name="redirectUrl" id="redirectUrlInput" value="" />
 
-          <!-- Tabs -->
-          <ul class="nav nav-tabs" id="shareTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-              <button class="nav-link active" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual" type="button" role="tab" aria-controls="individual" aria-selected="true">Individual</button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" id="group-tab" data-bs-toggle="tab" data-bs-target="#group" type="button" role="tab" aria-controls="group" aria-selected="false">Group</button>
-            </li>
-            <li class="nav-item" role="presentation">
-              <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="false">All</button>
-            </li>
-          </ul>
+            <!-- Tabs -->
+            <ul class="nav nav-tabs" id="shareTabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual" type="button" role="tab" aria-controls="individual" aria-selected="true">Individual</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="group-tab" data-bs-toggle="tab" data-bs-target="#group" type="button" role="tab" aria-controls="group" aria-selected="false">Group</button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="false">All</button>
+              </li>
+            </ul>
 
-          <div class="tab-content mt-3" id="shareTabsContent">
-            <!-- Individual Share Tab -->
-            <div class="tab-pane fade show active" id="individual" role="tabpanel" aria-labelledby="individual-tab">
-              <div class="mb-3">
-                <label for="shareWithUserIds" class="form-label">Share With Users</label>
-                <select name="shareWithUserIds" id="shareWithUserIds" class="form-control" data-choices data-choices-removeItem multiple>
-                  <% (allUsers || []).forEach(function(u) { %>
-                  <option value="<%= u.id %>">
-                    <%= u.name %> - <%= u.department %>
-                  </option>
-                  <% }) %>
-                </select>
-                <small class="form-text text-muted">
-                  Select one or more users to share the Files/Folders. 
-                </small>
+            <div class="tab-content mt-3" id="shareTabsContent">
+              <!-- Individual Share Tab -->
+              <div class="tab-pane fade show active" id="individual" role="tabpanel" aria-labelledby="individual-tab">
+                <div class="mb-3">
+                  <label for="shareWithUserIds" class="form-label">Share With Users</label>
+                  <select name="shareWithUserIds" id="shareWithUserIds" class="form-control" data-choices data-choices-removeItem multiple>
+                    <% (allUsers || []).forEach(function(u) { %>
+                    <option value="<%= u.id %>">
+                      <%= u.name %> - <%= u.department %>
+                    </option>
+                    <% }) %>
+                  </select>
+                  <small class="form-text text-muted">
+                    Select one or more users to share the Files/Folders.
+                  </small>
+                </div>
+              </div>
+
+              <!-- Group Share Tab -->
+              <div class="tab-pane fade" id="group" role="tabpanel" aria-labelledby="group-tab">
+                <div class="mb-3">
+                  <label for="shareWithGroupId" class="form-label">Share With Group</label>
+                  <select name="shareWithGroupId" id="shareWithGroupId" class="form-select">
+                    <option value="">Select a group...</option>
+                    <% (allgroups || []).forEach(function(g) { %>
+                    <option value="<%= g.id %>">
+                      <%= g.groupName %>
+                    </option>
+                    <% }) %>
+                  </select>
+                </div>
+              </div>
+
+              <!-- All Share Tab -->
+              <div class="tab-pane fade" id="all" role="tabpanel" aria-labelledby="all-tab">
+                <div class="form-check mt-3">
+                  <input class="form-check-input" type="checkbox" id="shareToAll" name="shareToAll" value="true" />
+                  <label class="form-check-label" for="shareToAll">
+                    Share with all users
+                  </label>
+                </div>
               </div>
             </div>
 
-            <!-- Group Share Tab -->
-            <div class="tab-pane fade" id="group" role="tabpanel" aria-labelledby="group-tab">
-              <div class="mb-3">
-                <label for="shareWithGroupId" class="form-label">Share With Group</label>
-                <select name="shareWithGroupId" id="shareWithGroupId" class="form-select">
-                  <option value="">Select a group...</option>
-                  <% (allgroups || []).forEach(function(g) { %>
-                  <option value="<%= g.id %>">
-                    <%= g.groupName %>
-                  </option>
-                  <% }) %>
-                </select>
-              </div>
-            </div>
-
-            <!-- All Share Tab -->
-            <div class="tab-pane fade" id="all" role="tabpanel" aria-labelledby="all-tab">
-              <div class="form-check mt-3">
-                <input class="form-check-input" type="checkbox" id="shareToAll" name="shareToAll" value="true" />
-                <label class="form-check-label" for="shareToAll">
-                  Share with all users
-                </label>
-              </div>
+            <div class="mb-3">
+              <label for="access" class="form-label">Permission Level</label>
+              <select name="access" id="access" class="form-select" required>
+                <option value="read">View & Download</option>
+                <option value="NoDownload">View & Can't Download</option>
+              </select>
             </div>
           </div>
 
-          <div class="mb-3">
-            <label for="access" class="form-label">Permission Level</label>
-            <select name="access" id="access" class="form-select" required>
-              <option value="read">View & Download</option>
-              <option value="NoDownload">View & Can't Download</option>
-            </select>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary">Share</button>
+            <button type="button" class="btn btn-secondary" id="shareModalCancel">Cancel</button>
           </div>
         </div>
-
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Share</button>
-          <button type="button" class="btn btn-secondary" id="shareModalCancel">Cancel</button>
-        </div>
-      </div>
-    </form>
+      </form>
+    </div>
   </div>
-</div>
 
 
   <!-- Manage Access Modal -->
@@ -409,72 +430,72 @@
     });
   </script>
   <!-- access model -->
-<script>
-  const accessModal = document.getElementById('accessModal');
-const accessModalClose = document.getElementById('accessModalClose');
-const accessModalCancel = document.getElementById('accessModalCancel');
-const accessItemName = document.getElementById('accessItemName');
-const sharedUsersList = document.getElementById('sharedUsersList');
-const accessModalBackdrop = document.getElementById('accessModalBackdrop');
+  <script>
+    const accessModal = document.getElementById('accessModal');
+    const accessModalClose = document.getElementById('accessModalClose');
+    const accessModalCancel = document.getElementById('accessModalCancel');
+    const accessItemName = document.getElementById('accessItemName');
+    const sharedUsersList = document.getElementById('sharedUsersList');
+    const accessModalBackdrop = document.getElementById('accessModalBackdrop');
 
-let toggleUserListVisible = false;
+    let toggleUserListVisible = false;
 
-function openStopShareModel(itemId, itemType, itemName) {
-  accessItemName.textContent = `${itemType.charAt(0).toUpperCase() + itemType.slice(1)}: ${itemName}`;
-  sharedUsersList.innerHTML = '<li class="list-group-item text-muted">Loading...</li>';
+    function openStopShareModel(itemId, itemType, itemName) {
+      accessItemName.textContent = `${itemType.charAt(0).toUpperCase() + itemType.slice(1)}: ${itemName}`;
+      sharedUsersList.innerHTML = '<li class="list-group-item text-muted">Loading...</li>';
 
-  fetch(`/shared-users/${itemType}/${itemId}`)
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        console.log(data.sharedWith);
-      }
-      sharedUsersList.innerHTML = '';
+      fetch(`/shared-users/${itemType}/${itemId}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            console.log(data.sharedWith);
+          }
+          sharedUsersList.innerHTML = '';
 
-      if (!data.success) {
-        sharedUsersList.innerHTML = '<li class="list-group-item text-danger">No sharing records found.</li>';
-        return;
-      }
+          if (!data.success) {
+            sharedUsersList.innerHTML = '<li class="list-group-item text-danger">No sharing records found.</li>';
+            return;
+          }
 
-      // Shared with Everyone - FIXED: Separate form for stop share to all
-      if (data.shareToAll) {
-        const shareToAllLi = document.createElement('li');
-        shareToAllLi.className = 'list-group-item d-flex justify-content-between align-items-center bg-light';
-        
-        // Create a separate form for stopping share to all
-        const stopShareToAllForm = document.createElement('form');
-        stopShareToAllForm.method = 'POST';
-        stopShareToAllForm.action = '/stop-share';
-        stopShareToAllForm.className = 'd-inline';
-        stopShareToAllForm.onsubmit = function() {
-          return confirm('Are you sure you want to stop sharing with everyone?');
-        };
-        
-        // Add hidden inputs
-        stopShareToAllForm.appendChild(createHiddenInput('itemId', itemId));
-        stopShareToAllForm.appendChild(createHiddenInput('itemType', itemType));
-        stopShareToAllForm.appendChild(createHiddenInput('stopShareToAll', 'true'));
-        stopShareToAllForm.appendChild(createHiddenInput('redirectUrl', encodeURIComponent(window.location.pathname + window.location.search)));
-        
-        // Add submit button
-        const submitButton = document.createElement('button');
-        submitButton.type = 'submit';
-        submitButton.className = 'btn btn-sm btn-warning';
-        submitButton.textContent = 'Stop Share to All';
-        stopShareToAllForm.appendChild(submitButton);
-        
-        shareToAllLi.innerHTML = '<span><strong>📢 Shared with Everyone</strong></span>';
-        shareToAllLi.appendChild(stopShareToAllForm);
-        
-        sharedUsersList.appendChild(shareToAllLi);
-      }
+          // Shared with Everyone - FIXED: Separate form for stop share to all
+          if (data.shareToAll) {
+            const shareToAllLi = document.createElement('li');
+            shareToAllLi.className = 'list-group-item d-flex justify-content-between align-items-center bg-light';
 
-      // Shared with specific users/groups
-      if (Array.isArray(data.sharedWith) && data.sharedWith.length > 0) {
-        // Controls (Select All, Deselect All, Stop Sharing Selected)
-        const controlsLi = document.createElement('li');
-        controlsLi.className = 'list-group-item d-flex justify-content-between align-items-center';
-        controlsLi.innerHTML = `
+            // Create a separate form for stopping share to all
+            const stopShareToAllForm = document.createElement('form');
+            stopShareToAllForm.method = 'POST';
+            stopShareToAllForm.action = '/stop-share';
+            stopShareToAllForm.className = 'd-inline';
+            stopShareToAllForm.onsubmit = function() {
+              return confirm('Are you sure you want to stop sharing with everyone?');
+            };
+
+            // Add hidden inputs
+            stopShareToAllForm.appendChild(createHiddenInput('itemId', itemId));
+            stopShareToAllForm.appendChild(createHiddenInput('itemType', itemType));
+            stopShareToAllForm.appendChild(createHiddenInput('stopShareToAll', 'true'));
+            stopShareToAllForm.appendChild(createHiddenInput('redirectUrl', encodeURIComponent(window.location.pathname + window.location.search)));
+
+            // Add submit button
+            const submitButton = document.createElement('button');
+            submitButton.type = 'submit';
+            submitButton.className = 'btn btn-sm btn-warning';
+            submitButton.textContent = 'Stop Share to All';
+            stopShareToAllForm.appendChild(submitButton);
+
+            shareToAllLi.innerHTML = '<span><strong>📢 Shared with Everyone</strong></span>';
+            shareToAllLi.appendChild(stopShareToAllForm);
+
+            sharedUsersList.appendChild(shareToAllLi);
+          }
+
+          // Shared with specific users/groups
+          if (Array.isArray(data.sharedWith) && data.sharedWith.length > 0) {
+            // Controls (Select All, Deselect All, Stop Sharing Selected)
+            const controlsLi = document.createElement('li');
+            controlsLi.className = 'list-group-item d-flex justify-content-between align-items-center';
+            controlsLi.innerHTML = `
           <div>
             <button type="button" class="btn btn-sm btn-secondary me-2" onclick="selectAllCheckboxes(true)">
               <iconify-icon icon="fluent-mdl2:add-to" class="align-middle fs-18"></iconify-icon>Select All</button>
@@ -492,125 +513,123 @@ function openStopShareModel(itemId, itemType, itemName) {
             ` : ''}
           </div>
         `;
-        sharedUsersList.appendChild(controlsLi);
+            sharedUsersList.appendChild(controlsLi);
 
-        // Show/Hide toggle button
-        const toggleLi = document.createElement('li');
-        toggleLi.className = 'list-group-item';
-        toggleLi.innerHTML = `
+            // Show/Hide toggle button
+            const toggleLi = document.createElement('li');
+            toggleLi.className = 'list-group-item';
+            toggleLi.innerHTML = `
           <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleUserList()">Show Users</button>
         `;
-        sharedUsersList.appendChild(toggleLi);
+            sharedUsersList.appendChild(toggleLi);
 
-        // User list wrapper (initially hidden)
-        const userListWrapper = document.createElement('ul');
-        userListWrapper.id = 'userListWrapper';
-        userListWrapper.style.display = 'none';
-        userListWrapper.className = 'list-group mt-2';
+            // User list wrapper (initially hidden)
+            const userListWrapper = document.createElement('ul');
+            userListWrapper.id = 'userListWrapper';
+            userListWrapper.style.display = 'none';
+            userListWrapper.className = 'list-group mt-2';
 
-        // Form 1: Just remove selected users (no stopShareToAll)
-        const bulkRemoveForm = document.createElement('form');
-        bulkRemoveForm.method = 'POST';
-        bulkRemoveForm.action = '/stop-share';
-        bulkRemoveForm.id = 'bulkRemoveForm';
-        bulkRemoveForm.style.display = 'none';
-        bulkRemoveForm.appendChild(createHiddenInput('itemId', itemId));
-        bulkRemoveForm.appendChild(createHiddenInput('itemType', itemType));
-        bulkRemoveForm.appendChild(createHiddenInput('redirectUrl', encodeURIComponent(window.location.pathname + window.location.search)));
+            // Form 1: Just remove selected users (no stopShareToAll)
+            const bulkRemoveForm = document.createElement('form');
+            bulkRemoveForm.method = 'POST';
+            bulkRemoveForm.action = '/stop-share';
+            bulkRemoveForm.id = 'bulkRemoveForm';
+            bulkRemoveForm.style.display = 'none';
+            bulkRemoveForm.appendChild(createHiddenInput('itemId', itemId));
+            bulkRemoveForm.appendChild(createHiddenInput('itemType', itemType));
+            bulkRemoveForm.appendChild(createHiddenInput('redirectUrl', encodeURIComponent(window.location.pathname + window.location.search)));
 
-        // Form 2: Stop sharing to all AND remove selected users (only if shareToAll is true)
-        let bulkStopAllForm = null;
-        if (data.shareToAll) {
-          bulkStopAllForm = document.createElement('form');
-          bulkStopAllForm.method = 'POST';
-          bulkStopAllForm.action = '/stop-share';
-          bulkStopAllForm.id = 'bulkStopAllForm';
-          bulkStopAllForm.style.display = 'none';
-          bulkStopAllForm.appendChild(createHiddenInput('itemId', itemId));
-          bulkStopAllForm.appendChild(createHiddenInput('itemType', itemType));
-          bulkStopAllForm.appendChild(createHiddenInput('stopShareToAll', 'true'));
-          bulkStopAllForm.appendChild(createHiddenInput('redirectUrl', encodeURIComponent(window.location.pathname + window.location.search)));
-        }
-
-        // Add each user/group with checkboxes
-        data.sharedWith.forEach(entry => {
-          console.log('Processing entry:', entry); // Debug log
-          
-          const li = document.createElement('li');
-          li.className = 'list-group-item d-flex justify-content-between align-items-center';
-
-          let label = '';
-          let checkboxValue = '';
-
-          // Handle user entries - check multiple possible structures
-          if (entry.user) {
-            const userId = entry.user.id || entry.user._id || entry.userId;
-            const userName = entry.user.name || entry.user.username || 'Unknown User';
-            const userDept = entry.user.department || 'N/A';
-            
-            if (userId && userId !== undefined && userId !== null) {
-              label = `👤 User: ${userName} (${userDept})`;
-              checkboxValue = `user-${userId}`;
-            } else {
-              console.warn('User ID is undefined for entry:', entry);
-              return; // Skip this entry
+            // Form 2: Stop sharing to all AND remove selected users (only if shareToAll is true)
+            let bulkStopAllForm = null;
+            if (data.shareToAll) {
+              bulkStopAllForm = document.createElement('form');
+              bulkStopAllForm.method = 'POST';
+              bulkStopAllForm.action = '/stop-share';
+              bulkStopAllForm.id = 'bulkStopAllForm';
+              bulkStopAllForm.style.display = 'none';
+              bulkStopAllForm.appendChild(createHiddenInput('itemId', itemId));
+              bulkStopAllForm.appendChild(createHiddenInput('itemType', itemType));
+              bulkStopAllForm.appendChild(createHiddenInput('stopShareToAll', 'true'));
+              bulkStopAllForm.appendChild(createHiddenInput('redirectUrl', encodeURIComponent(window.location.pathname + window.location.search)));
             }
-          } 
-          // Handle group entries - check multiple possible structures
-          else if (entry.group) {
-            const groupId = entry.group.id || entry.group._id || entry.groupId;
-            const groupName = entry.group.groupName || entry.group.name || 'Unknown Group';
-            
-            if (groupId && groupId !== undefined && groupId !== null) {
-              label = `👥 Group: ${groupName}`;
-              checkboxValue = `group-${groupId}`;
-            } else {
-              console.warn('Group ID is undefined for entry:', entry);
-              return; // Skip this entry
-            }
-          }
-          // Handle direct userId/groupId in entry (if no nested user/group object)
-          else if (entry.userId) {
-            if (entry.userId !== undefined && entry.userId !== null) {
-              label = `👤 User ID: ${entry.userId}`;
-              checkboxValue = `user-${entry.userId}`;
-            } else {
-              console.warn('Direct userId is undefined for entry:', entry);
-              return; // Skip this entry
-            }
-          }
-          else if (entry.groupId) {
-            if (entry.groupId !== undefined && entry.groupId !== null) {
-              label = `👥 Group ID: ${entry.groupId}`;
-              checkboxValue = `group-${entry.groupId}`;
-            } else {
-              console.warn('Direct groupId is undefined for entry:', entry);
-              return; // Skip this entry
-            }
-          }
-          else {
-            console.warn('Unknown entry structure:', entry);
-            return; // Skip this entry
-          }
 
-          // Only proceed if we have a valid checkboxValue
-          if (!checkboxValue || checkboxValue.includes('undefined')) {
-            console.warn('Invalid checkboxValue generated:', checkboxValue, 'for entry:', entry);
-            return; // Skip this entry
-          }
+            // Add each user/group with checkboxes
+            data.sharedWith.forEach(entry => {
+              console.log('Processing entry:', entry); // Debug log
 
-          // Create checkbox inputs for both forms
-          let checkboxesHTML = `
+              const li = document.createElement('li');
+              li.className = 'list-group-item d-flex justify-content-between align-items-center';
+
+              let label = '';
+              let checkboxValue = '';
+
+              // Handle user entries - check multiple possible structures
+              if (entry.user) {
+                const userId = entry.user.id || entry.user._id || entry.userId;
+                const userName = entry.user.name || entry.user.username || 'Unknown User';
+                const userDept = entry.user.department || 'N/A';
+
+                if (userId && userId !== undefined && userId !== null) {
+                  label = `👤 User: ${userName} (${userDept})`;
+                  checkboxValue = `user-${userId}`;
+                } else {
+                  console.warn('User ID is undefined for entry:', entry);
+                  return; // Skip this entry
+                }
+              }
+              // Handle group entries - check multiple possible structures
+              else if (entry.group) {
+                const groupId = entry.group.id || entry.group._id || entry.groupId;
+                const groupName = entry.group.groupName || entry.group.name || 'Unknown Group';
+
+                if (groupId && groupId !== undefined && groupId !== null) {
+                  label = `👥 Group: ${groupName}`;
+                  checkboxValue = `group-${groupId}`;
+                } else {
+                  console.warn('Group ID is undefined for entry:', entry);
+                  return; // Skip this entry
+                }
+              }
+              // Handle direct userId/groupId in entry (if no nested user/group object)
+              else if (entry.userId) {
+                if (entry.userId !== undefined && entry.userId !== null) {
+                  label = `👤 User ID: ${entry.userId}`;
+                  checkboxValue = `user-${entry.userId}`;
+                } else {
+                  console.warn('Direct userId is undefined for entry:', entry);
+                  return; // Skip this entry
+                }
+              } else if (entry.groupId) {
+                if (entry.groupId !== undefined && entry.groupId !== null) {
+                  label = `👥 Group ID: ${entry.groupId}`;
+                  checkboxValue = `group-${entry.groupId}`;
+                } else {
+                  console.warn('Direct groupId is undefined for entry:', entry);
+                  return; // Skip this entry
+                }
+              } else {
+                console.warn('Unknown entry structure:', entry);
+                return; // Skip this entry
+              }
+
+              // Only proceed if we have a valid checkboxValue
+              if (!checkboxValue || checkboxValue.includes('undefined')) {
+                console.warn('Invalid checkboxValue generated:', checkboxValue, 'for entry:', entry);
+                return; // Skip this entry
+              }
+
+              // Create checkbox inputs for both forms
+              let checkboxesHTML = `
             <input class="form-check-input bulk-checkbox" type="checkbox" name="selected[]" value="${checkboxValue}" id="chk-${checkboxValue}" form="bulkRemoveForm">
           `;
 
-          if (data.shareToAll) {
-            checkboxesHTML += `
+              if (data.shareToAll) {
+                checkboxesHTML += `
               <input class="form-check-input bulk-checkbox" type="checkbox" name="selected[]" value="${checkboxValue}" id="chk-stop-all-${checkboxValue}" form="bulkStopAllForm">
             `;
-          }
+              }
 
-          li.innerHTML = `
+              li.innerHTML = `
             <div class="form-check">
               ${checkboxesHTML}
               <label class="form-check-label" for="chk-${checkboxValue}">
@@ -619,91 +638,91 @@ function openStopShareModel(itemId, itemType, itemName) {
             </div>
           `;
 
-          userListWrapper.appendChild(li);
+              userListWrapper.appendChild(li);
+            });
+
+            // Add forms to the wrapper
+            userListWrapper.appendChild(bulkRemoveForm);
+            if (bulkStopAllForm) {
+              userListWrapper.appendChild(bulkStopAllForm);
+            }
+
+            sharedUsersList.appendChild(userListWrapper);
+          }
+
+          if ((!data.sharedWith || data.sharedWith.length === 0) && !data.shareToAll) {
+            sharedUsersList.innerHTML = '<li class="list-group-item text-muted">No sharing records found.</li>';
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching shared users:', error);
+          sharedUsersList.innerHTML = '<li class="list-group-item text-danger">Failed to load shared data.</li>';
         });
 
-        // Add forms to the wrapper
-        userListWrapper.appendChild(bulkRemoveForm);
-        if (bulkStopAllForm) {
-          userListWrapper.appendChild(bulkStopAllForm);
-        }
-
-        sharedUsersList.appendChild(userListWrapper);
-      }
-
-      if ((!data.sharedWith || data.sharedWith.length === 0) && !data.shareToAll) {
-        sharedUsersList.innerHTML = '<li class="list-group-item text-muted">No sharing records found.</li>';
-      }
-    })
-    .catch(error => {
-      console.error('Error fetching shared users:', error);
-      sharedUsersList.innerHTML = '<li class="list-group-item text-danger">Failed to load shared data.</li>';
-    });
-
-  accessModal.style.display = 'block';
-  accessModalBackdrop.style.display = 'block';
-}
-
-function createHiddenInput(name, value) {
-  const input = document.createElement('input');
-  input.type = 'hidden';
-  input.name = name;
-  input.value = value;
-  return input;
-}
-
-function toggleUserList() {
-  const wrapper = document.getElementById('userListWrapper');
-  const toggleBtn = sharedUsersList.querySelector('button.btn-outline-primary');
-  toggleUserListVisible = !toggleUserListVisible;
-  wrapper.style.display = toggleUserListVisible ? 'block' : 'none';
-  toggleBtn.textContent = toggleUserListVisible ? 'Hide Users' : 'Show Users';
-}
-
-function selectAllCheckboxes(select) {
-  const checkboxes = document.querySelectorAll('.bulk-checkbox');
-  checkboxes.forEach(cb => {
-    cb.checked = select;
-    // Sync both forms' checkboxes
-    const correspondingId = cb.id.replace('chk-stop-all-', 'chk-').replace('chk-', 'chk-stop-all-');
-    const correspondingCheckbox = document.getElementById(correspondingId);
-    if (correspondingCheckbox) {
-      correspondingCheckbox.checked = select;
+      accessModal.style.display = 'block';
+      accessModalBackdrop.style.display = 'block';
     }
-  });
-}
 
-// Add event listener to sync checkboxes between forms
-document.addEventListener('change', function(e) {
-  if (e.target.classList.contains('bulk-checkbox')) {
-    const isChecked = e.target.checked;
-    const checkboxValue = e.target.value;
+    function createHiddenInput(name, value) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      return input;
+    }
 
-    // Find corresponding checkbox in the other form and sync it
-    const allCheckboxes = document.querySelectorAll(`input[value="${checkboxValue}"]`);
-    allCheckboxes.forEach(cb => {
-      if (cb !== e.target) {
-        cb.checked = isChecked;
+    function toggleUserList() {
+      const wrapper = document.getElementById('userListWrapper');
+      const toggleBtn = sharedUsersList.querySelector('button.btn-outline-primary');
+      toggleUserListVisible = !toggleUserListVisible;
+      wrapper.style.display = toggleUserListVisible ? 'block' : 'none';
+      toggleBtn.textContent = toggleUserListVisible ? 'Hide Users' : 'Show Users';
+    }
+
+    function selectAllCheckboxes(select) {
+      const checkboxes = document.querySelectorAll('.bulk-checkbox');
+      checkboxes.forEach(cb => {
+        cb.checked = select;
+        // Sync both forms' checkboxes
+        const correspondingId = cb.id.replace('chk-stop-all-', 'chk-').replace('chk-', 'chk-stop-all-');
+        const correspondingCheckbox = document.getElementById(correspondingId);
+        if (correspondingCheckbox) {
+          correspondingCheckbox.checked = select;
+        }
+      });
+    }
+
+    // Add event listener to sync checkboxes between forms
+    document.addEventListener('change', function(e) {
+      if (e.target.classList.contains('bulk-checkbox')) {
+        const isChecked = e.target.checked;
+        const checkboxValue = e.target.value;
+
+        // Find corresponding checkbox in the other form and sync it
+        const allCheckboxes = document.querySelectorAll(`input[value="${checkboxValue}"]`);
+        allCheckboxes.forEach(cb => {
+          if (cb !== e.target) {
+            cb.checked = isChecked;
+          }
+        });
       }
     });
-  }
-});
 
-function closeAccessModal() {
-  accessModal.style.display = 'none';
-  accessModalBackdrop.style.display = 'none';
-  toggleUserListVisible = false;
-}
+    function closeAccessModal() {
+      accessModal.style.display = 'none';
+      accessModalBackdrop.style.display = 'none';
+      toggleUserListVisible = false;
+    }
 
-accessModalClose.addEventListener('click', closeAccessModal);
-accessModalCancel.addEventListener('click', closeAccessModal);
+    accessModalClose.addEventListener('click', closeAccessModal);
+    accessModalCancel.addEventListener('click', closeAccessModal);
 
-window.addEventListener('click', (e) => {
-  if (e.target === accessModalBackdrop) {
-    closeAccessModal();
-  }
-});
-</script>
+    window.addEventListener('click', (e) => {
+      if (e.target === accessModalBackdrop) {
+        closeAccessModal();
+      }
+    });
+  </script>
   <!-- search functionlity  -->
   <script>
     document.addEventListener("DOMContentLoaded", function() {

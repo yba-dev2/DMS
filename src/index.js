@@ -13,7 +13,6 @@ const sequelize = db.sequelize;
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(rateLimit({ windowMs: 12 * 60 * 1000, max: 100 }));
 app.use(compression());
 // app.use(morgan("dev"));
 app.use("/assets", express.static(path.join(__dirname, "public/assets")));
