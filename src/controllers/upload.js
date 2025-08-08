@@ -1,5 +1,6 @@
 const handleFileUpload = require("../middleware/upload");
 const ftp = require("basic-ftp");
+const stream = require("stream");
 require("dotenv").config();
 const mime = require("mime-types");
 const { Sequelize } = require("sequelize");
@@ -749,64 +750,221 @@ const viewFileFromQNAP = async (req, res) => {
   const fileId = req.params.fileId;
   const loggedInUserId = req.session.userId;
   const client = new ftp.Client();
-
-  // Detect if client aborted the request early (closed tab, etc)
-  req.on("close", () => {
-    console.log("Client aborted the request.");
-    client.close(); // make sure to close FTP client to free resources
-  });
-
+  
   try {
-    const user = await User.findByPk(loggedInUserId);
-    if (!user) return res.status(404).send("User not found");
-
-    const department = user.department;
-    const ftpConfig = ftpCredentials[department];
-    if (!ftpConfig) return res.status(404).send("Department not configured");
-
+    console.log(`Starting download for fileId: ${fileId}, userId: ${loggedInUserId}`);
+    
+    // Step 1: Get the logged-in user (for permissions)
+    const loggedInUser = await User.findByPk(loggedInUserId);
+    if (!loggedInUser) {
+      console.error("Logged-in user not found:", loggedInUserId);
+      return res.status(404).send("User not found");
+    }
+    
+    // Step 2: Get File with its owner/uploader information
     const file = await File.findOne({
       where: { id: fileId },
       include: [
         { model: Folder, as: "folder" },
         { model: CreateFolder, as: "linkedFolderRef" },
-      ],
+        { 
+          model: User, 
+          as: "uploader", // or whatever your association is called
+          attributes: ['id', 'department', 'name'] // Get the file owner's department
+        }
+      ]
     });
-
-    if (!file) return res.status(404).send("File not found in database");
-    await logDownload(file.id, loggedInUserId);
-    const folderPath = `${file.linkedFolderRef?.path || ""}/${file.folder?.folderName || ""}`
+    
+    if (!file) {
+      console.error("File not found:", fileId);
+      return res.status(404).send("File not found");
+    }
+    
+    // Step 3: Determine which QNAP to use based on file owner's department
+    let fileOwnerDepartment;
+    
+    if (file.uploader && file.uploader.department) {
+      // If file has uploader info, use that department
+      fileOwnerDepartment = file.uploader.department;
+      console.log("Using file owner's department:", fileOwnerDepartment);
+    } else if (file.linkedFolderRef && file.linkedFolderRef.createdBy) {
+      // Alternative: get department from folder creator
+      const folderCreator = await User.findByPk(file.linkedFolderRef.createdBy);
+      fileOwnerDepartment = folderCreator?.department;
+      console.log("Using folder creator's department:", fileOwnerDepartment);
+    } else {
+      // Fallback: try to determine from folder path
+      const folderPath = file.linkedFolderRef?.path;
+      if (folderPath) {
+        // Extract department from path (assuming first part is department)
+        const pathParts = folderPath.split('/');
+        const possibleDepartment = pathParts[0];
+        
+        // Check if this matches any of your department names in ftpCredentials
+        if (ftpCredentials[possibleDepartment]) {
+          fileOwnerDepartment = possibleDepartment;
+          console.log("Using department from path:", fileOwnerDepartment);
+        }
+      }
+    }
+    
+    // Step 4: Get FTP config for the file owner's department
+    if (!fileOwnerDepartment) {
+      console.error("Could not determine file owner's department for fileId:", fileId);
+      return res.status(500).send("Could not determine file location");
+    }
+    
+    const ftpConfig = ftpCredentials[fileOwnerDepartment];
+    if (!ftpConfig) {
+      console.error("FTP config not found for department:", fileOwnerDepartment);
+      return res.status(404).send("File location not configured");
+    }
+    
+    console.log("File details:", {
+      id: file.id,
+      originalname: file.originalname,
+      folderPath: file.linkedFolderRef?.path,
+      ownerDepartment: fileOwnerDepartment,
+      loggedInUserDepartment: loggedInUser.department
+    });
+    
+    // Step 5: Check access permissions for cross-department access
+    const sharedWith = await SharedWith.findOne({
+      where: { userId: loggedInUserId },
+      include: {
+        model: Share,
+        as: "share",
+        where: { fileId: fileId }
+      }
+    });
+    
+    // if (!sharedWith && fileOwnerDepartment !== loggedInUser.department) {
+    //   console.log("User trying to access file from different department without sharing");
+    //   return res.status(403).send("You don't have permission to access this file");
+    // }
+    
+    const accessLevel = sharedWith?.access || "write";
+    console.log("Access level:", accessLevel);
+    
+    // Step 6: Construct file path
+    const folderPath = file.linkedFolderRef?.path;
+    if (!folderPath) {
+      console.error("Folder path missing for file:", fileId);
+      return res.status(500).send("Folder path missing");
+    }
+    
+    const remoteFilePath = `/${folderPath}/${file.originalname}`
       .replace(/\/+/g, "/")
       .trim();
-
-    if (!folderPath) return res.status(500).send("Folder path missing");
-
-    const remoteFilePath = `/${folderPath}/${file.filename}`.replace(/\/+/g, "/").trim();
-
-    const mimeType = mime.lookup(file.filename) || "application/octet-stream";
-    res.setHeader("Content-Type", mimeType);
-
-    // For PDFs, open inline in browser
-    if (mimeType === "application/pdf") {
-      res.setHeader("Content-Disposition", `inline; filename="${file.filename}"`);
-    } else {
-      // For others, force download
-      res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
-    }
-
+    
+    console.log("Connecting to FTP server for department:", fileOwnerDepartment);
+    console.log("Remote file path:", remoteFilePath);
+    
+    const mimeType = mime.lookup(file.originalname) || "application/octet-stream";
+    
+    // Step 7: Connect to the correct QNAP server
     await client.access(ftpConfig);
-    await client.downloadTo(res, remoteFilePath);
+    console.log("FTP connection established");
+    
+    // Check if file exists
+    try {
+      const fileSize = await client.size(remoteFilePath);
+      console.log(`File size on server: ${fileSize} bytes`);
+    } catch (sizeError) {
+      console.error("File not found on FTP server:", remoteFilePath);
+      
+      // Try to list directory for debugging
+      try {
+        const directoryPath = remoteFilePath.substring(0, remoteFilePath.lastIndexOf('/'));
+        console.log("Checking directory:", directoryPath);
+        const files = await client.list(directoryPath);
+        console.log("Files in directory:", files.map(f => f.name));
+      } catch (listError) {
+        console.error("Could not list directory contents:", listError.message);
+      }
+      
+      return res.status(404).send("File not found on server");
+    }
+    
+    // Step 8: Download file
+    const writableStream = new stream.PassThrough();
+    const fileBufferPromise = new Promise((resolve, reject) => {
+      const chunks = [];
+      let totalSize = 0;
+      
+      writableStream.on("data", chunk => {
+        chunks.push(chunk);
+        totalSize += chunk.length;
+      });
+      
+      writableStream.on("end", () => {
+        console.log(`Download completed. Total size: ${totalSize} bytes`);
+        resolve(Buffer.concat(chunks));
+      });
+      
+      writableStream.on("error", reject);
+    });
+    
+    await client.downloadTo(writableStream, remoteFilePath);
+    const fileBuffer = await fileBufferPromise;
+    
+    // Step 9: Handle PDF files
+    if (mimeType === "application/pdf") {
+      console.log("Processing PDF file");
+      try {
+        const pdfDoc = await PDFDocument.load(fileBuffer, { ignoreEncryption: true });
+        const newPdfDoc = await PDFDocument.create();
+        const copiedPages = await newPdfDoc.copyPages(pdfDoc, pdfDoc.getPageIndices());
+        copiedPages.forEach(page => newPdfDoc.addPage(page));
+        const restrictedPdfBytes = await newPdfDoc.save();
+        
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Length", restrictedPdfBytes.length);
+        res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.originalname)}"`);
+        
+        return res.send(Buffer.from(restrictedPdfBytes));
+      } catch (pdfError) {
+        console.error("PDF processing error:", pdfError);
+        // Fall back to original file
+      }
+    }
+    
+    // Step 10: Handle other file types
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", fileBuffer.length);
+    
+    if (accessLevel === "NoDownload") {
+      console.log("Access denied for download");
+      return res.status(403).send("You do not have permission to download this file.");
+    }
+    
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.originalname)}"`);
+    res.send(fileBuffer);
+    
   } catch (err) {
-    // Ignore stream premature close errors (common when client closes tab)
-    if (err.code === "ERR_STREAM_PREMATURE_CLOSE") {
-      // console.log("Stream closed prematurely by client, ignoring...");
-    } else {
-      console.error("Error retrieving file:", err);
-      if (!res.headersSent) res.status(500).send("Internal Server Error");
+    console.error("Error retrieving file:", err);
+    console.error("Error stack:", err.stack);
+    
+    if (!res.headersSent) {
+      if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
+        res.status(503).send("File server unavailable");
+      } else if (err.code === 'ENOENT') {
+        res.status(404).send("File not found on server");
+      } else {
+        res.status(500).send("Internal Server Error");
+      }
     }
   } finally {
-    client.close();
+    try {
+      client.close();
+      console.log("FTP connection closed");
+    } catch (closeError) {
+      console.error("Error closing FTP connection:", closeError);
+    }
   }
 };
+//file Delete function 
+
 module.exports = {
   multipleUpload,
   getScan,

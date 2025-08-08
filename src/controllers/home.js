@@ -1,7 +1,7 @@
 const {ERPURL} = require('../config/ErpURL');
 const {Sequelize} = require("sequelize")
 const { User, File, Folder, CreateFolder, Share, SharedWith } = require('../config/dbConnector');
-
+const { Client } = require('ssh2');
 const home = async (req, res) => {
   try {
     let currentPath = req.query.path || '/'; // Default to root path if not provided
@@ -31,13 +31,54 @@ const home = async (req, res) => {
   }
 };
 
-// const login = (req, res) => {
-//   return res.render('./authentication/login.ejs');
-// };
+// QNAP share folder mapping based on your users
+const shareMapping = {
+  'ZFS18_DATA': 'Finance',
+  'ZFS19_DATA': 'HRAD',
+  'ZFS20_DATA': 'Information Technology'
+};
 
-// const register = (req, res) => {
-//   return res.render('./authentication/register.ejs', { messages: req.flash() });
-// };
+const getStorageForUser = (userShare) => {
+  return new Promise((resolve, reject) => {
+    const conn = new Client();
+
+    conn.on('ready', () => {
+      const command = `df -h | grep '/share/${userShare}'`;
+
+      conn.exec(command, (err, stream) => {
+        if (err) return reject(err);
+
+        let data = '';
+        stream.on('data', chunk => data += chunk);
+        stream.stderr.on('data', chunk => console.error('SSH Error:', chunk.toString()));
+        stream.on('close', () => {
+          conn.end();
+          const parts = data.trim().split(/\s+/);
+
+          if (parts.length >= 6) {
+            resolve({
+              size: parts[1],
+              used: parts[2],
+              avail: parts[3],
+              usePercent: parts[4],
+              mountPoint: parts[5],
+              displayName: shareMapping[userShare] || userShare
+            });
+          } else {
+            reject(new Error('Invalid SSH output'));
+          }
+        });
+      });
+
+    }).connect({
+      host: '172.16.16.111',
+      port: 22,
+      username: 'System',
+      password: 'p1ne@pple'
+    });
+  });
+};
+
 const welcome = async (req, res) => {
   try {
     if (!req.session.userId) {
@@ -46,38 +87,43 @@ const welcome = async (req, res) => {
     }
 
     const user = await User.findByPk(req.session.userId);
-    
     if (!user) {
       req.flash("error", "User Not Found!");
       return res.status(404).send("User not found");
     }
 
-    // Count total folders
-    const totalFolders = await CreateFolder.count();
+    // Count totals
+    const [totalFolders, totalFiles, sharedFiles] = await Promise.all([
+      CreateFolder.count(),
+      File.count(),
+      Share.count()
+    ]);
 
-    // Count total files (assuming you have a File model)
-    const totalFiles = await File.count();
+    // Determine user's assigned QNAP share folder
+    const userShare = user.qnapShare || 'ZFS18_DATA'; // adjust field as needed
 
-    // Count shared folders
-     
+    // Fetch QNAP storage info via SSH
+    const storage = await getStorageForUser(userShare);
 
-    // Count shared files (where fileId is not null)
-   
     req.flash("success", "Login successful!");
+
     return res.render('index.ejs', {
       messages: req.flash(),
       user,
       stats: {
         totalFolders,
         totalFiles,
-      }
+        sharedFiles
+      },
+      storage // now available in EJS
     });
 
   } catch (error) {
     console.error("Error loading user:", error.message);
-    res.status(500).send("Internal server errorrr");
+    res.status(500).send("Internal server error");
   }
 };
+
 
 module.exports = {
   getWelcome: welcome,

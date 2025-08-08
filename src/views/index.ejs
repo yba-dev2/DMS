@@ -1,5 +1,4 @@
 <%- include("./Layouts/header", { user: user})%>
-
 <div class="page-content">
 
   <!-- Start Container Fluid -->
@@ -120,59 +119,68 @@
       <div class="col-lg-12">
         <div class="card">
           <div class="card-header d-flex align-items-center justify-content-between gap-2">
-            <h4 class="card-title">Upload Statistics</h4>
-            <div>
-              <button type="button" class="btn btn-sm btn-outline-light">ALL</button>
-              <button type="button" class="btn btn-sm btn-outline-light">1M</button>
-              <button type="button" class="btn btn-sm btn-outline-light">6M</button>
-              <button type="button" class="btn btn-sm btn-outline-light active">1Y</button>
-            </div>
+            <h4 class="card-title">Storage Overview</h4>
           </div>
           <div class="card-body">
             <div class="row text-center">
               <div class="col-md-3 col-6">
                 <div class="bg-soft-light">
-                  <p class="text-muted pt-3 mb-1">Total Sales</p>
-                  <h4 class="pb-3">
-                    <span>$50.4k</span>
-                  </h4>
+                  <p class="text-muted pt-3 mb-1">Total Storage</p>
+                  <h4 class="pb-3"><span><%= storage.size %></span></h4>
                 </div>
               </div>
               <div class="col-md-3 col-6">
                 <div class="bg-soft-light">
-                  <p class="text-muted pt-3 mb-1">Total Refunds</p>
-                  <h4 class="pb-3">
-                    <span>$3.2k</span>
-                  </h4>
+                  <p class="text-muted pt-3 mb-1">Used</p>
+                  <h4 class="pb-3"><span><%= storage.used %></span></h4>
                 </div>
               </div>
               <div class="col-md-3 col-6">
                 <div class="bg-soft-light">
-                  <p class="text-muted pt-3 mb-1">Total Orders</p>
-                  <h4 class="pb-3">
-                    <span>1,200</span>
-                  </h4>
+                  <p class="text-muted pt-3 mb-1">Available</p>
+                  <h4 class="pb-3"><span><%= storage.avail %></span></h4>
                 </div>
               </div>
               <div class="col-md-3 col-6">
                 <div class="bg-soft-light">
-                  <p class="text-muted pt-3 mb-1">Net Profit</p>
-                  <h4 class="pb-3">
-                    <span>$15.7k</span>
-                  </h4>
+                  <p class="text-muted pt-3 mb-1">Usage</p>
+                  <h4 class="pb-3"><span><%= storage.usePercent %></span></h4>
                 </div>
               </div>
             </div>
 
             <div dir="ltr">
-              <div id="dash-performance-chart" class="apex-charts"></div>
+              <div id="dash-performance-chart" class="apex-charts" style="max-width: 500px; margin: auto;"></div>
             </div>
           </div>
+
         </div> <!-- end card-->
       </div> <!-- end col -->
     </div> <!-- end row -->
   </div>
   <!-- End Container Fluid -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script>
+    const used = parseFloat('<%= storage.used.replace(/[A-Za-z]/g, "") %>'); // Remove unit
+    const available = parseFloat('<%= storage.avail.replace(/[A-Za-z]/g, "") %>');
+
+    const options = {
+      chart: {
+        type: 'pie'
+      },
+      labels: ['Used', 'Available'],
+      series: [used, available],
+      title: {
+        text: 'Storage Usage: <%= storage.displayName %>',
+        align: 'center'
+      },
+      colors: ['#f44336', '#4caf50']
+    };
+
+    const chart = new ApexCharts(document.querySelector("#dash-performance-chart"), options);
+    chart.render();
+  </script>
+
 
 
 

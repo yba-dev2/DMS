@@ -1208,8 +1208,9 @@ const getSharedWithMeFolders = async (req, res) => {
     const relevantShares = allShares.filter((share) => {
       const sharedToUser = share.sharedWith.some((sw) => {
         const direct = sw.user?.id === userId;
-        const inGroup =
-          sw.group?.members?.some((member) => member.id === userId);
+        const inGroup = sw.group?.members?.some(
+          (member) => member.id === userId
+        );
         return direct || inGroup;
       });
 
@@ -1249,8 +1250,9 @@ const getSharedWithMeFolders = async (req, res) => {
         .filter((sw) => {
           if (sharedByUser) return true;
           const isUser = sw.user?.id === userId;
-          const isGroupMember =
-            sw.group?.members?.some((member) => member.id === userId);
+          const isGroupMember = sw.group?.members?.some(
+            (member) => member.id === userId
+          );
           return isUser || isGroupMember;
         })
         .map((sw) => {
@@ -1274,6 +1276,8 @@ const getSharedWithMeFolders = async (req, res) => {
         sharedBy: share.sharer?.name || "Unknown",
         sharedWith,
         parentId: type === "file" ? itemData.parentId : null,
+        filename: type === "file" ? itemData.filename : null,
+        mimetype: type === "file" ? itemData.mimetype : null,
       });
     }
 
@@ -1293,7 +1297,6 @@ const getSharedWithMeFolders = async (req, res) => {
     res.status(500).send("Server Error");
   }
 };
-
 
 //View the share file
 const ShareFilesView = async (req, res) => {
@@ -1348,6 +1351,20 @@ const ShareFilesView = async (req, res) => {
       return res.status(404).json({ error: "File not found" });
     }
 
+    // Determine file type and extension
+    const fileExtension = file.filename.toLowerCase().split(".").pop();
+    const mimeType = mime.lookup(file.filename) || "application/octet-stream";
+    const isSupportedDocument = ["pdf", "docx", "doc", "xlsx", "xls"].includes(
+      fileExtension
+    );
+
+    console.log("File details:", {
+      filename: file.filename,
+      extension: fileExtension,
+      mimeType: mimeType,
+      isSupported: isSupportedDocument,
+    });
+
     // Get folder path and department from the correct relationship
     let folderPath, folderDept, linkedFolderInfo;
 
@@ -1357,19 +1374,11 @@ const ShareFilesView = async (req, res) => {
       folderPath = file.linkedFolderRef.path;
       folderDept = file.linkedFolderRef.department;
       linkedFolderInfo = "direct";
-      // console.log('Using direct linked folder:', {
-      //   path: folderPath,
-      //   department: folderDept
-      // });
     } else if (file.folder && file.folder.linkedFolderRef) {
       // File linked through Folder to CreateFolder
       folderPath = file.folder.linkedFolderRef.path;
       folderDept = file.folder.linkedFolderRef.department;
       linkedFolderInfo = "through_folder";
-      // console.log('Using folder linked folder:', {
-      //   path: folderPath,
-      //   department: folderDept
-      // });
     }
 
     if (!folderPath || !folderDept) {
@@ -1410,12 +1419,8 @@ const ShareFilesView = async (req, res) => {
     }
 
     const remoteFilePath = `/${folderPath}/${file.filename}`;
-    const mimeType = mime.lookup(file.filename) || "application/octet-stream";
 
     // Find share using the new table structure
-    // console.log('Checking share permissions for file:', fileId);
-
-    // First, get the share record
     const share = await Share.findOne({
       where: { fileId: fileId },
     });
@@ -1430,13 +1435,12 @@ const ShareFilesView = async (req, res) => {
 
     // Check if user has access through direct sharing or shareToAll
     let hasAccess = false;
-    let accessLevel = "read"; // default
+    let accessLevel = "write"; // default
 
     // Check if shareToAll is enabled
     if (share.shareToAll) {
       hasAccess = true;
-      accessLevel = "read"; // default access level for shareToAll
-      // console.log('Access granted via shareToAll');
+      accessLevel = "write"; // default access level for shareToAll
     } else {
       // Check if user has explicit permission through SharedWith table
       const sharedWithRecord = await SharedWith.findOne({
@@ -1449,7 +1453,6 @@ const ShareFilesView = async (req, res) => {
       if (sharedWithRecord) {
         hasAccess = true;
         accessLevel = sharedWithRecord.access;
-        // console.log('Access granted via direct share, level:', accessLevel);
       } else {
         // Also check if user has access through group membership
         const groupShare = await SharedWith.findOne({
@@ -1476,7 +1479,6 @@ const ShareFilesView = async (req, res) => {
         if (groupShare) {
           hasAccess = true;
           accessLevel = groupShare.access;
-          // console.log('Access granted via group membership, level:', accessLevel);
         }
       }
     }
@@ -1485,7 +1487,6 @@ const ShareFilesView = async (req, res) => {
     if (!hasAccess && file.uploadedBy === loggedInUserId) {
       hasAccess = true;
       accessLevel = "write";
-      // console.log('Access granted as file owner');
     }
 
     if (!hasAccess) {
@@ -1504,19 +1505,19 @@ const ShareFilesView = async (req, res) => {
 
     // Check NoDownload access before FTP operations
     if (accessLevel === "NoDownload") {
-      // console.log('Access denied: NoDownload permission');
       return res.status(403).json({
         error: "Access denied",
         message: "You do not have permission to download this file.",
       });
     }
 
-    // **SECURITY HEADERS FOR HTTPS**
+    // **ENHANCED SECURITY HEADERS FOR ALL DOCUMENT TYPES**
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
 
-    // **CORS HEADERS FOR HTTPS**
+    // **ENHANCED CORS HEADERS**
     const origin = req.headers.origin;
     if (
       origin &&
@@ -1531,23 +1532,21 @@ const ShareFilesView = async (req, res) => {
       "Content-Type, Authorization, X-Requested-With"
     );
 
-    // **CACHE HEADERS FOR PDFs**
-    if (mimeType === "application/pdf") {
+    // **DOCUMENT-SPECIFIC CACHE HEADERS**
+    if (isSupportedDocument) {
       res.setHeader("Cache-Control", "private, max-age=3600");
-      res.setHeader("ETag", `"${fileId}-${Date.now()}"`);
+      res.setHeader("ETag", `"${fileId}-${file.filename}-${Date.now()}"`);
+    } else {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     }
-
-    // console.log('Attempting FTP connection:', {
-    //   host: ftpConfig.host,
-    //   user: ftpConfig.user,
-    //   remoteFilePath,
-    //   secure: ftpConfig.secure || 'not specified'
-    // });
 
     // FTP download with better error handling
     try {
       await client.access(ftpConfig);
-      // console.log('FTP connection established successfully');
+      console.log(
+        "FTP connection established successfully for:",
+        fileExtension.toUpperCase()
+      );
     } catch (ftpConnError) {
       console.error("FTP connection failed:", ftpConnError);
       return res.status(503).json({
@@ -1561,7 +1560,10 @@ const ShareFilesView = async (req, res) => {
       const chunks = [];
       writableStream.on("data", (chunk) => chunks.push(chunk));
       writableStream.on("end", () => {
-        // console.log('FTP download completed, buffer size:', Buffer.concat(chunks).length);
+        console.log(
+          `${fileExtension.toUpperCase()} download completed, buffer size:`,
+          Buffer.concat(chunks).length
+        );
         resolve(Buffer.concat(chunks));
       });
       writableStream.on("error", (err) => {
@@ -1572,12 +1574,16 @@ const ShareFilesView = async (req, res) => {
 
     try {
       await client.downloadTo(writableStream, remoteFilePath);
-      // console.log('FTP download initiated successfully');
+      console.log(
+        `FTP download initiated successfully for ${fileExtension.toUpperCase()}:`,
+        file.filename
+      );
     } catch (ftpError) {
       console.error("FTP download error:", {
         error: ftpError.message,
         code: ftpError.code,
         remoteFilePath,
+        fileType: fileExtension.toUpperCase(),
       });
 
       // Check if it's a file not found error
@@ -1594,7 +1600,7 @@ const ShareFilesView = async (req, res) => {
     const fileBuffer = await fileBufferPromise;
 
     if (!fileBuffer || fileBuffer.length === 0) {
-      console.error("Empty file buffer received");
+      console.error("Empty file buffer received for:", file.filename);
       return res.status(404).json({
         error: "File not found",
         message:
@@ -1602,9 +1608,12 @@ const ShareFilesView = async (req, res) => {
       });
     }
 
-    if (mimeType === "application/pdf") {
+    // **ENHANCED DOCUMENT TYPE HANDLING**
+
+    // PDF Processing (existing logic with improvements)
+    if (fileExtension === "pdf") {
       try {
-        // console.log('Processing PDF, buffer size:', fileBuffer.length);
+        console.log("Processing PDF, buffer size:", fileBuffer.length);
 
         const pdfDoc = await PDFDocument.load(fileBuffer, {
           ignoreEncryption: true,
@@ -1618,26 +1627,27 @@ const ShareFilesView = async (req, res) => {
         pages.forEach((page) => newPdfDoc.addPage(page));
         const newBuffer = await newPdfDoc.save();
 
-        // console.log('PDF processed successfully, new buffer size:', newBuffer.length);
+        console.log(
+          "PDF processed successfully, new buffer size:",
+          newBuffer.length
+        );
 
-        // **ENHANCED PDF HEADERS FOR HTTPS**
+        // **ENHANCED PDF HEADERS**
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Length", newBuffer.length);
         res.setHeader(
           "Content-Disposition",
           `inline; filename="${encodeURIComponent(file.filename)}"`
         );
-
-        // **SECURITY HEADERS SPECIFIC TO PDF**
         res.setHeader(
           "Content-Security-Policy",
-          "default-src 'self'; object-src 'none';"
+          "default-src 'self'; object-src 'none'; frame-ancestors 'self';"
         );
 
         return res.send(Buffer.from(newBuffer));
       } catch (pdfError) {
         console.error("PDF processing error:", pdfError);
-        // console.log("Falling back to original PDF");
+        console.log("Falling back to original PDF");
 
         // Fallback: serve original PDF if processing fails
         res.setHeader("Content-Type", "application/pdf");
@@ -1650,12 +1660,95 @@ const ShareFilesView = async (req, res) => {
       }
     }
 
-    // For non-PDFs
+    // **WORD DOCUMENT PROCESSING**
+    if (fileExtension === "docx" || fileExtension === "doc") {
+      console.log("Processing Word document:", file.filename);
+
+      try {
+        // Validate Word document structure
+        if (fileExtension === "docx" && fileBuffer.length < 100) {
+          throw new Error("Invalid or corrupted Word document");
+        }
+
+        // Enhanced Word document headers
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+        res.setHeader("Content-Length", fileBuffer.length);
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${encodeURIComponent(file.filename)}"`
+        );
+        res.setHeader(
+          "Content-Security-Policy",
+          "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';"
+        );
+
+        console.log("Word document served successfully:", file.filename);
+        return res.send(fileBuffer);
+      } catch (wordError) {
+        console.error("Word document processing error:", wordError);
+        return res.status(500).json({
+          error: "Word Document Error",
+          message: "Failed to process Word document",
+        });
+      }
+    }
+
+    // **EXCEL SPREADSHEET PROCESSING**
+    if (fileExtension === "xlsx" || fileExtension === "xls") {
+      console.log("Processing Excel spreadsheet:", file.filename);
+
+      try {
+        // Validate Excel document structure
+        if (fileExtension === "xlsx" && fileBuffer.length < 100) {
+          throw new Error("Invalid or corrupted Excel document");
+        }
+
+        // Enhanced Excel headers
+        const excelMimeType =
+          fileExtension === "xlsx"
+            ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            : "application/vnd.ms-excel";
+
+        res.setHeader("Content-Type", excelMimeType);
+        res.setHeader("Content-Length", fileBuffer.length);
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${encodeURIComponent(file.filename)}"`
+        );
+        res.setHeader(
+          "Content-Security-Policy",
+          "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';"
+        );
+
+        console.log("Excel spreadsheet served successfully:", file.filename);
+        return res.send(fileBuffer);
+      } catch (excelError) {
+        console.error("Excel processing error:", excelError);
+        return res.status(500).json({
+          error: "Excel Document Error",
+          message: "Failed to process Excel document",
+        });
+      }
+    }
+
+    // **FALLBACK FOR OTHER FILE TYPES**
+    console.log(
+      "Serving other file type:",
+      fileExtension.toUpperCase(),
+      file.filename
+    );
+
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Content-Length", fileBuffer.length);
+
+    // For non-supported documents, suggest download instead of inline view
+    const disposition = isSupportedDocument ? "inline" : "attachment";
     res.setHeader(
       "Content-Disposition",
-      `inline; filename="${encodeURIComponent(file.filename)}"`
+      `${disposition}; filename="${encodeURIComponent(file.filename)}"`
     );
 
     return res.send(fileBuffer);
@@ -1663,7 +1756,7 @@ const ShareFilesView = async (req, res) => {
     console.error("ShareFilesView Error:", err);
     console.error("Error stack:", err.stack);
 
-    // **ENHANCED ERROR HANDLING FOR HTTPS**
+    // **ENHANCED ERROR HANDLING**
     if (!res.headersSent) {
       res.setHeader("Content-Type", "application/json");
 
@@ -1685,6 +1778,16 @@ const ShareFilesView = async (req, res) => {
         return res.status(500).json({
           error: "PDF Processing Error",
           message: "Failed to process PDF file",
+        });
+      } else if (err.message.includes("Word document")) {
+        return res.status(500).json({
+          error: "Word Document Error",
+          message: "Failed to process Word document",
+        });
+      } else if (err.message.includes("Excel")) {
+        return res.status(500).json({
+          error: "Excel Processing Error",
+          message: "Failed to process Excel spreadsheet",
         });
       } else if (err.name === "SequelizeConnectionError") {
         return res.status(503).json({
@@ -1709,6 +1812,7 @@ const ShareFilesView = async (req, res) => {
     }
   }
 };
+
 //based on share access level, return the file or folder
 
 module.exports = {

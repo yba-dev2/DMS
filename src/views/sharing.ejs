@@ -153,7 +153,7 @@
                       <% } else if (file.type==="file" ) { %>
                       <div class="d-flex gap-2">
                         <!-- Preview button always visible -->
-                        <a href="javascript:void(0);" class="btn btn-soft-secondary btn-sm" onclick="previewPdf('/shared-files/<%= file._id %>', '<%= file.mimetype %>')" title="Preview">
+                        <a href="javascript:void(0);" class="btn btn-soft-secondary btn-sm" onclick="previewDocument('/shared-files/<%= file._id %>', '<%= file.mimetype %>', '<%= file.filename %>')" title="Preview">
                           <iconify-icon icon="solar:eye-broken" class="align-middle fs-18"></iconify-icon>
                         </a>
 
@@ -216,14 +216,20 @@
   </div>
 
   <!-- Enhanced PDF Preview Modal -->
-  <div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-labelledby="pdfPreviewModalLabel" aria-hidden="true">
+
+  <!-- Unified Document Preview Modal -->
+
+  <div class="modal fade" id="documentPreviewModal" tabindex="-1" aria-labelledby="documentPreviewModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-fullscreen">
       <div class="modal-content">
         <div class="modal-header border-bottom-0 bg-light">
-          <h5 class="modal-title">PDF Preview</h5>
+          <h5 class="modal-title" id="documentPreviewModalLabel">
+            <span id="documentTypeLabel">Document</span> Preview
+          </h5>
+
           <div class="d-flex flex-wrap align-items-center justify-content-end ms-auto px-2 py-1 gap-2">
             <!-- Navigation Controls -->
-            <div class="btn-group btn-group-sm me-2" role="group" aria-label="PDF Navigation">
+            <div class="btn-group btn-group-sm me-2" role="group" aria-label="Document Navigation" id="navigationControls">
               <button class="btn btn-outline-primary" onclick="goToFirstPage()" id="firstPageBtn" title="First Page">
                 <i class="bx bx-first-page"></i>
               </button>
@@ -238,28 +244,37 @@
               </button>
             </div>
 
-            <!-- Page Info -->
-            <div class="d-flex align-items-center gap-2 me-3">
-              <span>Page</span>
+            <!-- Page/Sheet Info -->
+            <div class="d-flex align-items-center gap-2 me-3" id="pageInfo">
+              <span id="pageLabel">Page</span>
               <input type="number" id="pageInput" class="form-control form-control-sm text-center" min="1" style="max-width: 70px;" onchange="goToPage(this.value)">
               <span>of <span id="totalPages">0</span></span>
             </div>
 
-            <!-- Zoom Controls -->
-            <div class="btn-group btn-group-sm align-items-center me-3" role="group" aria-label="Zoom Controls">
-              <button class="btn btn-outline-secondary" onclick="zoomOut()" title="Zoom Out">
+            <!-- Zoom Controls (PDF only) -->
+            <div class="btn-group btn-group-sm align-items-center me-3" role="group" aria-label="Zoom Controls" id="zoomControls">
+              <button class="btn btn-outline-secondary" onclick="zoomOut()" id="zoomOutBtn" title="Zoom Out">
                 <i class="bx bx-zoom-out"></i>
               </button>
               <span class="badge bg-secondary-subtle text-dark d-flex align-items-center px-2" id="zoomLevel">150%</span>
-              <button class="btn btn-outline-secondary" onclick="zoomIn()" title="Zoom In">
+              <button class="btn btn-outline-secondary" onclick="zoomIn()" id="zoomInBtn" title="Zoom In">
                 <i class="bx bx-zoom-in"></i>
               </button>
             </div>
 
-            <!-- View Mode Toggle -->
+            <!-- View Mode Toggle (PDF only) -->
             <button class="btn btn-outline-info btn-sm me-2" onclick="toggleViewMode()" id="viewModeBtn" title="Toggle View Mode">
               Show All Pages
             </button>
+
+            <!-- Document Type Indicator -->
+            <span class="badge bg-primary me-2" id="documentTypeBadge">PDF</span>
+
+            <!-- Full Screen Toggle -->
+            <button class="btn btn-outline-secondary btn-sm me-2" onclick="toggleFullscreen()" id="fullscreenBtn" title="Toggle Fullscreen">
+              <i class="bx bx-fullscreen"></i>
+            </button>
+
           </div>
 
           <button type="button" class="btn-close ms-3" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -267,14 +282,14 @@
 
         <div class="modal-body p-0">
           <!-- Loading Indicator -->
-          <div id="pdfLoading" class="text-center py-5 px-3 bg-white">
+          <div id="documentLoading" class="text-center py-5 px-3 bg-white">
             <div class="spinner-border text-primary mb-3" role="status" aria-hidden="true"></div>
-            <p class="mb-3">Loading PDF...</p>
+            <p class="mb-3" id="loadingText">Loading Document...</p>
             <div class="container">
               <div class="row justify-content-center">
                 <div class="col-12 col-md-6">
                   <div class="progress">
-                    <div id="loadProgress" class="progress-bar progress-bar-striped progress-bar-animated w-0"></div>
+                    <div id="loadProgress" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
                   </div>
                 </div>
               </div>
@@ -282,17 +297,834 @@
           </div>
 
           <!-- Error Message -->
-          <div id="pdfError" class="alert alert-danger d-none mx-3 my-2" role="alert"></div>
+          <div id="documentError" class="alert alert-danger d-none mx-3 my-2" role="alert"></div>
 
-          <!-- PDF Container -->
-          <div id="pdfContainer" class="d-none bg-body-secondary p-4 overflow-auto" style="max-height: 80vh;">
-            <!-- PDF pages will be rendered here -->
+          <!-- Document Container -->
+          <div id="documentContainer" class="d-none bg-body-secondary p-4 overflow-auto" style="max-height: 80vh;">
+            <!-- All document types will be rendered here -->
+          </div>
+        </div>
+
+        <!-- Footer with document info -->
+        <div class="modal-footer border-top-0 bg-light py-2">
+          <div class="d-flex align-items-center gap-3">
+            <small class="text-muted" id="documentInfo">
+              <span id="fileSize"></span>
+              <span id="lastModified"></span>
+            </small>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Add CSS for document types and fullscreen mode -->
+  <style>
+    /* Document type badge colors */
+    #documentTypeBadge.document-pdf {
+      background-color: #dc3545 !important;
+    }
+
+    #documentTypeBadge.document-word {
+      background-color: #0d6efd !important;
+    }
+
+    #documentTypeBadge.document-excel {
+      background-color: #198754 !important;
+    }
+
+    /* Fullscreen mode styling */
+    .modal.fullscreen-mode .modal-dialog {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      max-height: none;
+      margin: 0;
+      border-radius: 0;
+    }
+
+    .modal.fullscreen-mode .modal-content {
+      height: 100vh;
+      border: none;
+      border-radius: 0;
+    }
+
+    .modal.fullscreen-mode #documentContainer {
+      max-height: calc(100vh - 200px);
+    }
+
+    /* Word document styling */
+    .word-document {
+      background: white;
+      padding: 2rem;
+      margin: 0 auto;
+      max-width: 8.5in;
+      min-height: 11in;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      line-height: 1.6;
+    }
+
+    .word-document .document-content {
+      font-family: 'Times New Roman', serif;
+      font-size: 12pt;
+    }
+
+    /* Excel document styling */
+    .excel-container {
+      background: white;
+    }
+
+    .excel-sheet {
+      overflow-x: auto;
+    }
+
+    .excel-sheet table {
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .excel-sheet th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      border: 1px solid #dee2e6;
+      padding: 4px 8px;
+    }
+
+    .excel-sheet td {
+      border: 1px solid #dee2e6;
+      padding: 2px 6px;
+    }
+
+    /* PDF page styling */
+    .pdf-page-container {
+      margin-bottom: 2rem;
+    }
+
+    .pdf-page-container canvas {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Navigation controls responsive behavior */
+    @media (max-width: 768px) {
+      .modal-header .d-flex {
+        flex-wrap: wrap;
+        gap: 1rem;
+      }
+
+      #navigationControls,
+      #pageInfo,
+      #zoomControls {
+        margin-bottom: 0.5rem;
+      }
+    }
+
+    /* Ensure proper spacing for control groups */
+    .btn-group-sm .btn {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    /* Loading animation improvements */
+    .spinner-border {
+      width: 3rem;
+      height: 3rem;
+    }
+
+    .progress {
+      height: 8px;
+    }
+
+    /* Toast notifications positioning */
+    .position-fixed {
+      z-index: 1060;
+    }
+
+    /* Responsive adjustments for document container */
+    @media (max-width: 576px) {
+      #documentContainer {
+        padding: 1rem;
+      }
+
+      .word-document {
+        padding: 1rem;
+        margin: 0;
+        max-width: 100%;
+      }
+    }
+  </style>
+
+  <!-- Bootstrap Bundle JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- PDF.js -->
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script> -->
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+  <!-- Mammoth.js for Word documents -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+
+  <!-- SheetJS for Excel documents -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Enhanced PDF Preview Script -->
+  <script>
+    // Updated JavaScript functions with proper mimetype handling
+
+    // Global variables for document handling
+    let currentDocument = null;
+    let currentPageNum = 1;
+    let totalPagesCount = 0;
+    let currentScale = 1.5;
+    let viewMode = 'single'; // 'single' or 'all'
+    let documentType = null; // 'pdf', 'word', 'excel'
+    let currentDocumentUrl = null;
+    let pdfjsLib = null;
+
+    // Mimetype to extension mapping
+    const MIMETYPE_MAP = {
+      // PDF
+      'application/pdf': 'pdf',
+
+      // Word documents
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/msword': 'doc',
+      'application/vnd.ms-word': 'doc',
+
+      // Excel documents  
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.ms-excel.sheet.macroEnabled.12': 'xlsm',
+
+      // Text-based alternatives (sometimes used)
+      'text/csv': 'csv',
+      'application/csv': 'csv'
+    };
+
+    // Function to determine file extension from various inputs
+    function determineFileExtension(fileUrl, mimeType, filename) {
+      console.log('Determining extension from:');
+      console.log('- fileUrl:', fileUrl);
+      console.log('- mimeType:', mimeType);
+      console.log('- filename:', filename);
+
+      let extension = '';
+
+      // Method 1: Try to get extension from mimetype
+      if (mimeType && mimeType.trim()) {
+        const cleanMimetype = mimeType.toLowerCase().trim();
+        // console.log('Checking mimetype:', cleanMimetype);
+
+        if (MIMETYPE_MAP[cleanMimetype]) {
+          extension = MIMETYPE_MAP[cleanMimetype];
+          // console.log('Extension from mimetype:', extension);
+          return extension;
+        }
+
+        // If exact match not found, check for partial matches
+        for (const [mime, ext] of Object.entries(MIMETYPE_MAP)) {
+          if (cleanMimetype.includes(mime) || mime.includes(cleanMimetype)) {
+            extension = ext;
+            // console.log('Extension from partial mimetype match:', extension);
+            return extension;
+          }
+        }
+      }
+
+      // Method 2: Try to get extension from filename
+      if (filename && filename.trim()) {
+        const cleanFilename = filename.toLowerCase().trim();
+        // console.log('Checking filename:', cleanFilename);
+
+        const filenameParts = cleanFilename.split('.');
+        if (filenameParts.length > 1) {
+          extension = filenameParts.pop();
+          // console.log('Extension from filename:', extension);
+          return extension;
+        }
+      }
+
+      // Method 3: Try to get extension from URL
+      if (fileUrl && fileUrl.trim()) {
+        // console.log('Checking fileUrl:', fileUrl);
+
+        // Remove query parameters and fragments
+        const cleanUrl = fileUrl.split('?')[0].split('#')[0];
+        const urlParts = cleanUrl.split('.');
+
+        if (urlParts.length > 1) {
+          extension = urlParts.pop().toLowerCase();
+          console.log('Extension from URL:', extension);
+          return extension;
+        }
+      }
+
+      // console.log('No extension could be determined');
+      return '';
+    }
+
+    // Main preview function - updated to work with new modal
+    async function previewDocument(fileUrl, mimeType, filename = null) {
+      // console.log('=== PREVIEW DOCUMENT FUNCTION CALLED ===');
+      // console.log('Raw parameters:');
+      // console.log('- fileUrl:', `"${fileUrl}"`);
+      // console.log('- mimeType:', `"${mimeType}"`);
+      // console.log('- filename:', `"${filename}"`);
+
+      // Handle empty/undefined parameters
+      const cleanFileUrl = (fileUrl || '').toString().trim();
+      const cleanMimeType = (mimeType || '').toString().trim();
+      const cleanFilename = (filename || '').toString().trim();
+
+      // console.log('Clean parameters:');
+      // console.log('- cleanFileUrl:', `"${cleanFileUrl}"`);
+      // console.log('- cleanMimeType:', `"${cleanMimeType}"`);
+      // console.log('- cleanFilename:', `"${cleanFilename}"`);
+
+      if (!cleanFileUrl) {
+        console.error('ERROR: No file URL provided');
+        alert('Error: No file URL provided');
+        return;
+      }
+
+      // Store current document URL for download/share functionality
+      currentDocumentUrl = cleanFileUrl;
+
+      const modal = new bootstrap.Modal(document.getElementById("documentPreviewModal"));
+      const loading = document.getElementById("documentLoading");
+      const error = document.getElementById("documentError");
+      const container = document.getElementById("documentContainer");
+      const progress = document.getElementById("loadProgress");
+
+      // Reset UI
+      loading.classList.remove('d-none');
+      error.classList.add('d-none');
+      container.classList.add('d-none');
+      container.innerHTML = '';
+      progress.style.width = '0%';
+
+      // Determine document type and update UI
+      const extension = determineFileExtension(cleanFileUrl, cleanMimeType, cleanFilename);
+
+      // console.log("Final detected extension:", extension);
+
+      updateDocumentTypeDisplay(extension, cleanFilename);
+      modal.show();
+
+      try {
+        if (extension === 'pdf') {
+          console.log('Processing as PDF');
+          documentType = 'pdf';
+          await previewPdf(cleanFileUrl);
+        } else if (extension === 'docx' || extension === 'doc') {
+          console.log('Processing as Word document');
+          documentType = 'word';
+          await previewWord(cleanFileUrl);
+        } else if (extension === 'xlsx' || extension === 'xls' || extension === 'xlsm') {
+          console.log('Processing as Excel spreadsheet');
+          documentType = 'excel';
+          await previewExcel(cleanFileUrl);
+        } else {
+          console.error('Unsupported file type detected:', extension);
+          console.log('Supported extensions: pdf, doc, docx, xls, xlsx, xlsm');
+          console.log('Received mimetype:', cleanMimeType);
+          console.log('Available mimetype mappings:', Object.keys(MIMETYPE_MAP));
+          throw new Error(`Unsupported file type: "${extension}". Mimetype: "${cleanMimeType}"`);
+        }
+
+        // Hide loading and show container
+        setTimeout(() => {
+          loading.classList.add('d-none');
+          container.classList.remove('d-none');
+          updateNavigationButtons();
+        }, 200);
+
+      } catch (err) {
+        console.error("Failed to preview document:", err);
+        loading.classList.add('d-none');
+        error.classList.remove('d-none');
+        error.textContent = 'Failed to load document: ' + err.message;
+      }
+    }
+
+    // Update document type indicator and UI elements
+    function updateDocumentTypeDisplay(type, filename) {
+      const typeLabel = document.getElementById('documentTypeLabel');
+      const typeBadge = document.getElementById('documentTypeBadge');
+      const pageLabel = document.getElementById('pageLabel');
+      const loadingText = document.getElementById('loadingText');
+
+      // Remove existing document type classes
+      typeBadge.classList.remove('document-pdf', 'document-word', 'document-excel');
+
+      switch (type) {
+        case 'pdf':
+          typeLabel.textContent = 'PDF';
+          typeBadge.textContent = 'PDF';
+          typeBadge.classList.add('document-pdf');
+          pageLabel.textContent = 'Page';
+          loadingText.textContent = 'Loading PDF...';
+          break;
+        case 'word':
+        case 'docx':
+        case 'doc':
+          typeLabel.textContent = 'Word';
+          typeBadge.textContent = 'DOCX';
+          typeBadge.classList.add('document-word');
+          pageLabel.textContent = 'Document';
+          loadingText.textContent = 'Loading Word Document...';
+          break;
+        case 'excel':
+        case 'xlsx':
+        case 'xls':
+        case 'xlsm':
+          typeLabel.textContent = 'Excel';
+          typeBadge.textContent = 'XLSX';
+          typeBadge.classList.add('document-excel');
+          pageLabel.textContent = 'Sheet';
+          loadingText.textContent = 'Loading Excel Spreadsheet...';
+          break;
+        default:
+          typeLabel.textContent = 'Document';
+          typeBadge.textContent = 'FILE';
+          pageLabel.textContent = 'Page';
+          loadingText.textContent = 'Loading Document...';
+          break;
+      }
+
+      // Update modal title with filename if provided
+      if (filename) {
+        typeLabel.textContent += ` - ${filename}`;
+      }
+    }
+
+    // Word Document Preview
+    async function previewWord(fileUrl) {
+      if (!window.mammoth) {
+        throw new Error('Mammoth.js library not loaded');
+      }
+
+      console.log('Loading Word document from:', fileUrl);
+      const progress = document.getElementById("loadProgress");
+      progress.style.width = '30%';
+
+      try {
+        const response = await fetch(fileUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        progress.style.width = '60%';
+        const arrayBuffer = await response.arrayBuffer();
+
+        progress.style.width = '80%';
+        const result = await mammoth.convertToHtml({
+          arrayBuffer: arrayBuffer
+        });
+
+        const styledHtml = `
+      <div class="word-document">
+        <div class="document-header mb-4">
+          <div class="row">
+            <div class="col-12">
+              <div class="bg-white p-3 border-bottom">
+                <small class="text-muted">Microsoft Word Document</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="document-content">
+          ${result.value}
+        </div>
+      </div>
+    `;
+
+        const container = document.getElementById('documentContainer');
+        container.innerHTML = styledHtml;
+
+        if (result.messages.length > 0) {
+          console.log('Conversion messages:', result.messages);
+        }
+
+        progress.style.width = '100%';
+
+        totalPagesCount = 1;
+        currentPageNum = 1;
+        document.getElementById('totalPages').textContent = '1';
+        document.getElementById('pageInput').value = 1;
+        document.getElementById('pageInput').max = 1;
+
+      } catch (error) {
+        throw new Error(`Failed to load Word document: ${error.message}`);
+      }
+    }
+
+    // Excel Document Preview
+    async function previewExcel(fileUrl) {
+      if (!window.XLSX) {
+        throw new Error('SheetJS library not loaded');
+      }
+
+      // console.log('Loading Excel document from:', fileUrl);
+      const progress = document.getElementById("loadProgress");
+      progress.style.width = '30%';
+
+      try {
+        const response = await fetch(fileUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        progress.style.width = '60%';
+        const data = await response.arrayBuffer();
+
+        progress.style.width = '80%';
+        const workbook = XLSX.read(data, {
+          type: 'array'
+        });
+
+        let htmlContent = '<div class="excel-container">';
+
+        htmlContent += `
+      <div class="document-header bg-success text-white p-3 mb-0">
+        <div class="row align-items-center">
+          <div class="col">
+            <h6 class="mb-0"><i class="bx bxs-spreadsheet me-2"></i>Excel Spreadsheet</h6>
+            <small class="opacity-75">${workbook.SheetNames.length} sheet(s)</small>
+          </div>
+          <div class="col-auto">
+            <small class="opacity-75">Microsoft Excel</small>
+          </div>
+        </div>
+      </div>
+    `;
+
+        if (workbook.SheetNames.length > 1) {
+          htmlContent += '<ul class="nav nav-tabs mb-0" id="sheetTabs">';
+          workbook.SheetNames.forEach((sheetName, index) => {
+            htmlContent += `
+          <li class="nav-item">
+            <a class="nav-link ${index === 0 ? 'active' : ''}" 
+               href="#sheet${index}" 
+               data-bs-toggle="tab"
+               onclick="updateExcelSheetNavigation(${index + 1})">
+              <i class="bx bx-table me-1"></i>${sheetName}
+            </a>
+          </li>
+        `;
+          });
+          htmlContent += '</ul>';
+        }
+
+        htmlContent += '<div class="tab-content">';
+
+        workbook.SheetNames.forEach((sheetName, index) => {
+          const worksheet = workbook.Sheets[sheetName];
+          const html = XLSX.utils.sheet_to_html(worksheet, {
+            table: {
+              class: 'table table-striped table-bordered table-sm table-hover'
+            }
+          });
+
+          htmlContent += `
+        <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" 
+             id="sheet${index}">
+          <div class="excel-sheet">
+            <div class="sheet-info mb-3 p-2 bg-light border-bottom">
+              <small class="text-muted">
+                <strong>Sheet:</strong> ${sheetName} | 
+                <strong>Sheet ${index + 1}</strong> of ${workbook.SheetNames.length}
+              </small>
+            </div>
+            ${html}
+          </div>
+        </div>
+      `;
+        });
+
+        htmlContent += '</div></div>';
+
+        const container = document.getElementById('documentContainer');
+        container.innerHTML = htmlContent;
+
+        progress.style.width = '100%';
+
+        totalPagesCount = workbook.SheetNames.length;
+        currentPageNum = 1;
+        document.getElementById('totalPages').textContent = workbook.SheetNames.length;
+        document.getElementById('pageInput').value = 1;
+        document.getElementById('pageInput').max = workbook.SheetNames.length;
+
+      } catch (error) {
+        throw new Error(`Failed to load Excel document: ${error.message}`);
+      }
+    }
+    // PDF Document Preview
+    async function previewPdf(fileUrl) {
+      if (!pdfjsLib) {
+        throw new Error('PDF.js library not loaded');
+      }
+
+      // console.log('Loading PDF from:', fileUrl);
+      const progress = document.getElementById("loadProgress");
+      progress.style.width = '20%';
+      const container = document.getElementById("documentContainer");
+
+      // Clear any previous content
+      container.innerHTML = '';
+
+      const loadingTask = pdfjsLib.getDocument({
+        url: fileUrl,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
+        cMapPacked: true
+      });
+
+      loadingTask.onProgress = function(progressData) {
+        if (progressData.total > 0) {
+          const percent = Math.round((progressData.loaded / progressData.total) * 60) + 20;
+          progress.style.width = percent + '%';
+        }
+      };
+
+      currentDocument = await loadingTask.promise;
+      totalPagesCount = currentDocument.numPages;
+
+      // console.log('PDF loaded successfully. Total pages:', totalPagesCount);
+      progress.style.width = '90%';
+
+      document.getElementById('totalPages').textContent = totalPagesCount;
+      document.getElementById('pageInput').max = totalPagesCount;
+      document.getElementById('pageInput').value = 1;
+      currentPageNum = 1;
+
+      if (viewMode === 'single') {
+        await renderPdfPage(1);
+      } else {
+        await renderAllPdfPages();
+      }
+
+      progress.style.width = '100%';
+      updateNavigationButtons();
+    }
+    // PDF rendering functions (fully implemented)
+    async function renderPdfPage(pageNum) {
+      if (!currentDocument) return;
+
+      console.log('Rendering PDF page:', pageNum);
+      const container = document.getElementById('documentContainer');
+      container.innerHTML = ''; // Clear previous page content
+
+      // Create and append the canvas element
+      const canvas = document.createElement('canvas');
+      canvas.id = `pdf-page-${pageNum}`;
+      canvas.className = 'pdf-page-canvas';
+      container.appendChild(canvas);
+
+      const page = await currentDocument.getPage(pageNum);
+      const viewport = page.getViewport({
+        scale: currentScale
+      });
+      const context = canvas.getContext('2d');
+
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      };
+
+      await page.render(renderContext).promise;
+      console.log('Page rendered:', pageNum);
+
+      // Update navigation UI
+      currentPageNum = pageNum;
+      document.getElementById('pageInput').value = pageNum;
+      updateNavigationButtons();
+    }
+
+    async function renderAllPdfPages() {
+      if (!currentDocument) return;
+
+      const container = document.getElementById('documentContainer');
+      container.innerHTML = ''; // Clear previous content
+
+      for (let pageNum = 1; pageNum <= totalPagesCount; pageNum++) {
+        const page = await currentDocument.getPage(pageNum);
+        const viewport = page.getViewport({
+          scale: currentScale
+        });
+
+      
+        // Create the canvas for the page
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        canvas.style.maxWidth = '100%';
+        canvas.style.height = 'auto';
+        canvas.style.border = '1px solid #ddd';
+        canvas.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+        // Clear container and add canvas
+        container.innerHTML = '';
+        const pageWrapper = document.createElement('div');
+        pageWrapper.className = 'text-center mb-3';
+        pageWrapper.appendChild(canvas);
+        container.appendChild(pageWrapper);
+
+        // Render the page
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        };
+        await page.render(renderContext).promise;
+      }
+      // console.log('All pages rendered');
+    }
+
+    // Navigation functions
+    function goToFirstPage() {
+      if (documentType === 'pdf') {
+        goToPage(1);
+      }
+    }
+
+    function goToNextPage() {
+      if (documentType === 'pdf' && currentPageNum < totalPagesCount) {
+        goToPage(currentPageNum + 1);
+      }
+    }
+
+    function goToPrevPage() {
+      if (documentType === 'pdf' && currentPageNum > 1) {
+        goToPage(currentPageNum - 1);
+      }
+    }
+
+    function goToLastPage() {
+      if (documentType === 'pdf') {
+        goToPage(totalPagesCount);
+      }
+    }
+
+    function goToPage(pageNum) {
+      if (documentType === 'pdf') {
+        const pageNumber = parseInt(pageNum, 10);
+        if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPagesCount) {
+          currentPageNum = pageNumber;
+          renderPdfPage(currentPageNum);
+        }
+      }
+    }
+
+    function zoomIn() {
+      if (documentType === 'pdf') {
+        currentScale += 0.25;
+        if (viewMode === 'single') {
+          renderPdfPage(currentPageNum);
+        } else {
+          renderAllPdfPages();
+        }
+      }
+    }
+
+    function zoomOut() {
+      if (documentType === 'pdf' && currentScale > 0.5) {
+        currentScale -= 0.25;
+        if (viewMode === 'single') {
+          renderPdfPage(currentPageNum);
+        } else {
+          renderAllPdfPages();
+        }
+      }
+    }
+
+    function toggleViewMode() {
+      if (documentType === 'pdf') {
+        viewMode = (viewMode === 'single') ? 'all' : 'single';
+        if (viewMode === 'single') {
+          renderPdfPage(currentPageNum);
+        } else {
+          renderAllPdfPages();
+        }
+      }
+    }
+
+    function updateNavigationButtons() {
+      const prevBtn = document.getElementById('prevPageBtn');
+      const nextBtn = document.getElementById('nextPageBtn');
+      const firstBtn = document.getElementById('firstPageBtn');
+      const lastBtn = document.getElementById('lastPageBtn');
+      const pageInput = document.getElementById('pageInput');
+      const pageLabel = document.getElementById('pageLabel');
+
+      const isPdf = documentType === 'pdf';
+      const isSingleView = viewMode === 'single';
+
+      // Enable/Disable based on document type
+      if (!isPdf || !isSingleView) {
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        firstBtn.disabled = true;
+        lastBtn.disabled = true;
+        pageInput.disabled = true;
+        // Also hide or disable other PDF-specific controls if needed
+      } else {
+        pageInput.disabled = false;
+        // Enable/Disable based on current page
+        firstBtn.disabled = currentPageNum <= 1;
+        prevBtn.disabled = currentPageNum <= 1;
+        lastBtn.disabled = currentPageNum >= totalPagesCount;
+        nextBtn.disabled = currentPageNum >= totalPagesCount;
+      }
+    }
+    // Initialize libraries when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window['pdfjs-dist/build/pdf']) {
+        pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+        console.log('PDF.js initialized successfully');
+      } else if (window.pdfjsLib) {
+        pdfjsLib = window.pdfjsLib;
+        console.log('PDF.js found as window.pdfjsLib');
+      } else {
+        console.error('PDF.js failed to load');
+      }
+
+      if (window.mammoth) {
+        console.log('Mammoth.js loaded successfully');
+      } else {
+        console.warn('Mammoth.js not loaded');
+      }
+
+      if (window.XLSX) {
+        console.log('SheetJS loaded successfully');
+      } else {
+        console.warn('SheetJS not loaded');
+      }
+    });
+  </script>
+  <!-- Security Script -->
+  <script>
+    document.addEventListener('keydown', function(e) {
+      if (e.ctrlKey && ['p', 's', 'u', 'c', 'a'].includes(e.key.toLowerCase())) {
+        e.preventDefault();
+        alert("This shortcut is disabled.");
+      }
+
+      if (e.key === "F12") {
+        e.preventDefault();
+        alert("F12 is disabled.");
+      }
+    });
+
+    document.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+    });
+  </script>
 
   <!-- Search functionality -->
   <script>
@@ -326,352 +1158,6 @@
 
       searchInput.addEventListener("input", filterRows);
       filterRows();
-    });
-  </script>
-
-  <!-- Bootstrap Bundle JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- PDF.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-
-  <!-- Enhanced PDF Preview Script -->
-  <script>
-    // Global variables for PDF handling
-    let currentPdf = null;
-    let currentPageNum = 1;
-    let totalPagesCount = 0;
-    let currentScale = 1.5;
-    let viewMode = 'single'; // 'single' or 'all'
-    let pdfjsLib = null;
-
-    // Initialize PDF.js when page loads
-    document.addEventListener('DOMContentLoaded', function() {
-      if (window['pdfjs-dist/build/pdf']) {
-        pdfjsLib = window['pdfjs-dist/build/pdf'];
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
-        console.log('PDF.js initialized successfully');
-      } else {
-        console.error('PDF.js failed to load');
-      }
-    });
-
-    // Main preview function
-    async function previewPdf(fileUrl, fileType) {
-      const modal = new bootstrap.Modal(document.getElementById("pdfPreviewModal"));
-      const loading = document.getElementById("pdfLoading");
-      const error = document.getElementById("pdfError");
-      const container = document.getElementById("pdfContainer");
-      const progress = document.getElementById("loadProgress");
-
-      // Reset UI
-      loading.classList.remove('d-none');
-      error.classList.add('d-none');
-      container.classList.add('d-none');
-      container.innerHTML = '';
-      progress.style.width = '0%';
-
-      modal.show();
-
-      try {
-        if (!pdfjsLib) {
-          throw new Error('PDF.js library not loaded');
-        }
-
-        console.log('Loading PDF from:', fileUrl);
-        progress.style.width = '20%';
-
-        // Load the PDF document
-        const loadingTask = pdfjsLib.getDocument({
-          url: fileUrl,
-          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/cmaps/',
-          cMapPacked: true
-        });
-
-        // Track loading progress
-        loadingTask.onProgress = function(progressData) {
-          if (progressData.total > 0) {
-            const percent = Math.round((progressData.loaded / progressData.total) * 60) + 20;
-            progress.style.width = percent + '%';
-          }
-        };
-
-        currentPdf = await loadingTask.promise;
-        totalPagesCount = currentPdf.numPages;
-
-        console.log('PDF loaded successfully. Total pages:', totalPagesCount);
-        progress.style.width = '90%';
-
-        // Update UI elements
-        document.getElementById('totalPages').textContent = totalPagesCount;
-        document.getElementById('pageInput').max = totalPagesCount;
-        document.getElementById('pageInput').value = 1;
-        currentPageNum = 1;
-
-        // Render first page or all pages based on mode
-        if (viewMode === 'single') {
-          await renderSinglePage(1);
-        } else {
-          await renderAllPages();
-        }
-
-        progress.style.width = '100%';
-
-        // Hide loading and show container
-        setTimeout(() => {
-          loading.classList.add('d-none');
-          container.classList.remove('d-none');
-          updateNavigationButtons();
-        }, 200);
-
-      } catch (err) {
-        console.error("Failed to preview PDF:", err);
-        loading.classList.add('d-none');
-        error.classList.remove('d-none');
-
-        let errorMsg = 'Failed to load PDF: ';
-        if (err.message.includes('Invalid PDF')) {
-          errorMsg += 'The file is corrupted or not a valid PDF.';
-        } else if (err.message.includes('404')) {
-          errorMsg += 'PDF file not found.';
-        } else if (err.message.includes('CORS')) {
-          errorMsg += 'Access denied due to CORS policy.';
-        } else if (err.message.includes('range')) {
-          errorMsg += 'Invalid page number requested.';
-        } else {
-          errorMsg += err.message;
-        }
-
-        error.textContent = errorMsg;
-      }
-    }
-
-    // Render a single page
-    async function renderSinglePage(pageNum) {
-      if (!currentPdf || pageNum < 1 || pageNum > totalPagesCount) {
-        console.error('Invalid page number:', pageNum);
-        return;
-      }
-
-      try {
-        const container = document.getElementById('pdfContainer');
-        container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Rendering page...</p></div>';
-
-        const page = await currentPdf.getPage(pageNum);
-        const viewport = page.getViewport({
-          scale: currentScale
-        });
-
-        // Create canvas for this page
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        canvas.style.maxWidth = '100%';
-        canvas.style.height = 'auto';
-        canvas.style.border = '1px solid #ddd';
-        canvas.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-
-        // Clear container and add canvas
-        container.innerHTML = '';
-        const pageWrapper = document.createElement('div');
-        pageWrapper.className = 'text-center mb-3';
-        pageWrapper.appendChild(canvas);
-        container.appendChild(pageWrapper);
-
-        // Render the page
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport
-        };
-
-        await page.render(renderContext).promise;
-        console.log('Page', pageNum, 'rendered successfully');
-
-      } catch (err) {
-        console.error('Error rendering page:', err);
-        const container = document.getElementById('pdfContainer');
-        container.innerHTML = `<div class="alert alert-danger">Error rendering page ${pageNum}: ${err.message}</div>`;
-      }
-    }
-
-    // Render all pages
-    async function renderAllPages() {
-      if (!currentPdf) return;
-
-      const container = document.getElementById('pdfContainer');
-      container.innerHTML = '<div class="text-center"><div class="spinner-border"></div><p>Rendering all pages...</p></div>';
-
-      try {
-        container.innerHTML = '';
-
-        for (let pageNum = 1; pageNum <= totalPagesCount; pageNum++) {
-          const page = await currentPdf.getPage(pageNum);
-          const viewport = page.getViewport({
-            scale: currentScale
-          });
-
-          // Create canvas for this page
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-          canvas.style.maxWidth = '100%';
-          canvas.style.height = 'auto';
-          canvas.style.border = '1px solid #ddd';
-          canvas.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-
-          // Create page wrapper
-          const pageWrapper = document.createElement('div');
-          pageWrapper.className = 'text-center mb-4';
-          pageWrapper.innerHTML = `<div class="badge bg-secondary mb-2">Page ${pageNum} of ${totalPagesCount}</div>`;
-          pageWrapper.appendChild(canvas);
-          container.appendChild(pageWrapper);
-
-          // Render the page
-          const renderContext = {
-            canvasContext: context,
-            viewport: viewport
-          };
-
-          await page.render(renderContext).promise;
-          console.log('Page', pageNum, 'rendered');
-        }
-
-      } catch (err) {
-        console.error('Error rendering all pages:', err);
-        container.innerHTML = `<div class="alert alert-danger">Error rendering pages: ${err.message}</div>`;
-      }
-    }
-
-    // Navigation functions
-    function goToFirstPage() {
-      if (viewMode === 'single') {
-        currentPageNum = 1;
-        document.getElementById('pageInput').value = currentPageNum;
-        renderSinglePage(currentPageNum);
-        updateNavigationButtons();
-      }
-    }
-
-    function goToPrevPage() {
-      if (viewMode === 'single' && currentPageNum > 1) {
-        currentPageNum--;
-        document.getElementById('pageInput').value = currentPageNum;
-        renderSinglePage(currentPageNum);
-        updateNavigationButtons();
-      }
-    }
-
-    function goToNextPage() {
-      if (viewMode === 'single' && currentPageNum < totalPagesCount) {
-        currentPageNum++;
-        document.getElementById('pageInput').value = currentPageNum;
-        renderSinglePage(currentPageNum);
-        updateNavigationButtons();
-      }
-    }
-
-    function goToLastPage() {
-      if (viewMode === 'single') {
-        currentPageNum = totalPagesCount;
-        document.getElementById('pageInput').value = currentPageNum;
-        renderSinglePage(currentPageNum);
-        updateNavigationButtons();
-      }
-    }
-
-    function goToPage(pageNum) {
-      const page = parseInt(pageNum);
-      if (page >= 1 && page <= totalPagesCount && viewMode === 'single') {
-        currentPageNum = page;
-        renderSinglePage(currentPageNum);
-        updateNavigationButtons();
-      }
-    }
-
-    // Zoom functions
-    function zoomIn() {
-      currentScale += 0.25;
-      if (currentScale > 3) currentScale = 3;
-      document.getElementById('zoomLevel').textContent = Math.round(currentScale * 100) + '%';
-
-      if (viewMode === 'single') {
-        renderSinglePage(currentPageNum);
-      } else {
-        renderAllPages();
-      }
-    }
-
-    function zoomOut() {
-      currentScale -= 0.25;
-      if (currentScale < 0.5) currentScale = 0.5;
-      document.getElementById('zoomLevel').textContent = Math.round(currentScale * 100) + '%';
-
-      if (viewMode === 'single') {
-        renderSinglePage(currentPageNum);
-      } else {
-        renderAllPages();
-      }
-    }
-
-    // Toggle view mode
-    function toggleViewMode() {
-      const btn = document.getElementById('viewModeBtn');
-
-      if (viewMode === 'single') {
-        viewMode = 'all';
-        btn.textContent = 'Single Page';
-        renderAllPages();
-      } else {
-        viewMode = 'single';
-        btn.textContent = 'Show All Pages';
-        renderSinglePage(currentPageNum);
-      }
-
-      updateNavigationButtons();
-    }
-
-    // Update navigation button states
-    function updateNavigationButtons() {
-      const firstBtn = document.getElementById('firstPageBtn');
-      const prevBtn = document.getElementById('prevPageBtn');
-      const nextBtn = document.getElementById('nextPageBtn');
-      const lastBtn = document.getElementById('lastPageBtn');
-      const pageInput = document.getElementById('pageInput');
-
-      if (viewMode === 'single') {
-        firstBtn.disabled = (currentPageNum === 1);
-        prevBtn.disabled = (currentPageNum === 1);
-        nextBtn.disabled = (currentPageNum === totalPagesCount);
-        lastBtn.disabled = (currentPageNum === totalPagesCount);
-        pageInput.disabled = false;
-      } else {
-        firstBtn.disabled = true;
-        prevBtn.disabled = true;
-        nextBtn.disabled = true;
-        lastBtn.disabled = true;
-        pageInput.disabled = true;
-      }
-    }
-  </script>
-
-  <!-- Security Script -->
-  <script>
-    document.addEventListener('keydown', function(e) {
-      if (e.ctrlKey && ['p', 's', 'u', 'c', 'a'].includes(e.key.toLowerCase())) {
-        e.preventDefault();
-        alert("This shortcut is disabled.");
-      }
-
-      if (e.key === "F12") {
-        e.preventDefault();
-        alert("F12 is disabled.");
-      }
-    });
-
-    document.addEventListener('contextmenu', function(e) {
-      e.preventDefault();
     });
   </script>
 
