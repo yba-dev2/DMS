@@ -14,7 +14,7 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(compression());
-// app.use(morgan("dev"));
+app.use(morgan("dev"));
 app.use("/assets", express.static(path.join(__dirname, "public/assets")));
 app.use('/pdfjs', express.static(path.join(__dirname, 'node_modules/pdfjs-dist/build')));
 

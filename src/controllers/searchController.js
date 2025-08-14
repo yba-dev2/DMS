@@ -1,35 +1,42 @@
-const FolderModel = require("../model/File");
-const CreateFolder = require("../model/CreateFolder");
-const UserModel = require("../model/users");
+const {
+  User,
+  File,
+  Folder,
+  CreateFolder,
+} = require("../config/dbConnector");
 const { ERPURL } = require("../config/ErpURL");
+
 
 async function deepSearchWithFilter(folderId, keyword, department) {
   keyword = keyword.toLowerCase();
   const matches = [];
 
-  const baseFolder = await CreateFolder.findById(folderId).lean();
+  // Get base folder
+  const baseFolder = await CreateFolder.findOne({ where: { id: folderId } });
   if (!baseFolder || baseFolder.department !== department) return [];
 
-  const entries = await FolderModel.find({ linkedFolder: folderId })
-    .populate("uploadedBy");
+  // Get all folders under this CreateFolder
+  const entries = await Folder.findAll({
+    where: { linkedFolder: folderId },
+    include: [{ model: User, as: "uploadedByUser", attributes: ["username"] }]
+  });
 
   for (const entry of entries) {
-    // Safely check folder name
-    if (
-      entry.folderName &&
-      entry.folderName.toLowerCase().includes(keyword)
-    ) {
+    // Folder name match
+    if (entry.folderName && entry.folderName.toLowerCase().includes(keyword)) {
       matches.push({
         type: "folder",
         name: entry.folderName,
         date: entry.date,
-        uploadedBy: entry.uploadedBy?.username || "N/A",
-        department: baseFolder.department,
+        uploadedBy: entry.uploadedByUser?.username || "N/A",
+        department: baseFolder.department
       });
     }
 
-    // Safely check files
-    for (const file of entry.files || []) {
+    // Get files in this folder
+    const files = await File.findAll({ where: { folderId: entry.id } });
+
+    for (const file of files) {
       const originalNameMatch =
         file.originalname &&
         file.originalname.toLowerCase().includes(keyword);
@@ -43,18 +50,14 @@ async function deepSearchWithFilter(folderId, keyword, department) {
           name: file.originalname || file.filename,
           filename: file.filename,
           date: file.date,
-          uploadedBy: entry.uploadedBy?.username || "N/A",
-          department: baseFolder.department,
+          uploadedBy: entry.uploadedByUser?.username || "N/A",
+          department: baseFolder.department
         });
       }
     }
 
-    // Recurse deeper
-    const childMatches = await deepSearchWithFilter(
-      entry._id,
-      keyword,
-      department
-    );
+    // Recursive search in child folders (Folders that belong to this CreateFolder)
+    const childMatches = await deepSearchWithFilter(entry.id, keyword, department);
     matches.push(...childMatches);
   }
 
@@ -62,11 +65,11 @@ async function deepSearchWithFilter(folderId, keyword, department) {
 }
 
 async function deepSearchInDepartment(department, keyword) {
-  const topLevelFolders = await CreateFolder.find({ department }).lean();
+  const topLevelFolders = await CreateFolder.findAll({ where: { department } });
   const allMatches = [];
 
   for (const folder of topLevelFolders) {
-    const matches = await deepSearchWithFilter(folder._id, keyword, department);
+    const matches = await deepSearchWithFilter(folder.id, keyword, department);
     allMatches.push(...matches);
   }
 
@@ -75,10 +78,10 @@ async function deepSearchInDepartment(department, keyword) {
 
 const showSearchPage = async (req, res) => {
   try {
-    const user = await UserModel.findById(req.session.userId);
+    const user = await User.findByPk(req.session.userId);
     if (!user) {
       req.flash("error", "User not found!");
-      return res.redirect(`${ERPURL}`); 
+      return res.redirect(`${ERPURL}`);
     }
 
     const { keyword } = req.query;
@@ -93,7 +96,7 @@ const showSearchPage = async (req, res) => {
     res.render("DeepSearch.ejs", {
       matches,
       keyword,
-      user,
+      user
     });
   } catch (err) {
     console.error(err);
