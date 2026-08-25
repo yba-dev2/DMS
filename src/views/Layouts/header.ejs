@@ -22,6 +22,105 @@
   <!-- App css (Require in all Page) -->
   <link href="/assets/css/app.min.css" rel="stylesheet" type="text/css" />
 
+  <style>
+    :root {
+      --dms-menu-duration: 380ms;
+      --dms-menu-easing: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .wrapper .main-nav,
+    .wrapper .page-content,
+    .topbar {
+      transition-duration: var(--dms-menu-duration);
+      transition-timing-function: var(--dms-menu-easing);
+    }
+
+    .main-nav .nav-text,
+    .main-nav .menu-title {
+      transition: opacity 160ms ease, transform 280ms var(--dms-menu-easing);
+    }
+
+    /* Keep both sizes mounted so the logo cross-fades instead of popping. */
+    .main-nav .logo-box > a {
+      position: relative;
+      height: var(--bs-topbar-height);
+    }
+
+    .main-nav .logo-box .logo-sm,
+    .main-nav .logo-box .logo-lg {
+      display: block !important;
+      position: absolute;
+      top: 60%;
+      left: 50%;
+      object-fit: contain;
+      transform: translate(-50%, -50%);
+      transition: opacity 220ms ease, transform var(--dms-menu-duration) var(--dms-menu-easing);
+    }
+
+    .main-nav .logo-box .logo-lg {
+      width: 100px;
+      height: 100px;
+      left: 50px;
+      opacity: 1;
+      transform: translateY(-50%);
+    }
+
+    .main-nav .logo-box .logo-sm {
+      width: 62px;
+      height: 62px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    html[data-menu-size="condensed"] .main-nav .logo-box {
+      padding-inline: 0;
+    }
+
+    /* The vendor theme makes the condensed rail absolute, causing its items
+       to scroll off-screen with the page. Keep the navigation rail pinned. */
+    html[data-menu-size="condensed"] .main-nav {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+    }
+
+    html[data-menu-size="condensed"] .main-nav .scrollbar {
+      height: calc(100% - var(--bs-topbar-height)) !important;
+    }
+
+    html[data-menu-size="condensed"] .main-nav .logo-box .logo-sm {
+      opacity: 1;
+    }
+
+    html[data-menu-size="condensed"] .main-nav .logo-box .logo-lg {
+      display: block !important;
+      opacity: 0;
+      transform: translateY(-50%) scale(.72);
+      pointer-events: none;
+    }
+
+    html[data-menu-size="condensed"] .main-nav .navbar-nav .nav-link .nav-text {
+      display: block;
+      width: 0;
+      overflow: hidden;
+      visibility: hidden;
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+
+    .button-toggle-menu .menu-icon {
+      display: block;
+      width: 25px;
+      height: 25px;
+    }
+
+    .button-toggle-menu .menu-icon line {
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+    }
+  </style>
+
 
   <!-- Theme Config js (Require in all Page) -->
   <script src="/assets/js/config.js"></script>
@@ -39,8 +138,12 @@
           <div class="d-flex align-items-center">
             <!-- Menu Toggle Button -->
             <div class="topbar-item">
-              <button type="button" class="button-toggle-menu me-2">
-                <iconify-icon icon="solar:hamburger-menu-broken" class="fs-24 align-middle"></iconify-icon>
+              <button type="button" class="button-toggle-menu me-2" aria-label="Toggle navigation menu" aria-expanded="true">
+                <svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <line x1="4" y1="7" x2="20" y2="7"></line>
+                  <line x1="4" y1="12" x2="20" y2="12"></line>
+                  <line x1="4" y1="17" x2="20" y2="17"></line>
+                </svg>
               </button>
             </div>
 
@@ -61,22 +164,22 @@
             <div class="dropdown topbar-item">
               <a type="button" class="topbar-button" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                 <span class="d-flex align-items-center">
-                  <img class="rounded-circle" width="32" src="/assets/images/users/avatar-1.jpg" alt="avatar-3">
+                  <img class="rounded-circle" width="32" src="/assets/images/users/dummy-avatar.jpg" alt="Default profile avatar">
                 </span>
               </a>
               <div class="dropdown-menu dropdown-menu-end">
                 <!-- item-->
                 <h6 class="dropdown-header">Welcome, <%= user.name %></h6>
-                <a class="dropdown-item" href="pages-profile.html">
+                <a class="dropdown-item" href="/profile">
                   <i class="bx bx-user-circle text-muted fs-18 align-middle me-1"></i><span class="align-middle">Profile</span>
                 </a>
                 <a class="dropdown-item" href="apps-chat.html">
                   <i class="bx bx-message-dots text-muted fs-18 align-middle me-1"></i><span class="align-middle">Messages</span>
                 </a>
 
-                <a class="dropdown-item" href="pages-pricing.html">
+                <!-- <a class="dropdown-item" href="pages-pricing.html">
                   <i class="bx bx-wallet text-muted fs-18 align-middle me-1"></i><span class="align-middle">Pricing</span>
-                </a>
+                </a> -->
                 <a class="dropdown-item" href="pages-faqs.html">
                   <i class="bx bx-help-circle text-muted fs-18 align-middle me-1"></i><span class="align-middle">Help</span>
                 </a>
@@ -109,13 +212,13 @@
       <!-- Sidebar Logo -->
       <div class="logo-box">
         <a href="/welcome" class="logo-dark">
-          <img src="/assets/images/logo.png" class="logo-sm" alt="logo sm" style="height: 100px; width: 100px; ">
-          <img src="/assets/images/logo.png" class="logo-lg" alt="logo dark" style="height: 100px; width: 100px; ">
+          <img src="/assets/images/logo.png" class="logo-sm" alt="DMS logo">
+          <img src="/assets/images/logo.png" class="logo-lg" alt="DMS logo">
         </a>
 
         <a href="/welcome" class="logo-light">
-          <img src="/assets/images/logo-white.png" class="logo-sm" alt="logo sm" style="height: 100px; width: 100px; ">
-          <img src="/assets/images/logo-white.png" class="logo-lg" alt="logo light" style="height: 100px; width: 100px; ">
+          <img src="/assets/images/logo-white.png" class="logo-sm" alt="DMS logo">
+          <img src="/assets/images/logo-white.png" class="logo-lg" alt="DMS logo">
         </a>
       </div>
 

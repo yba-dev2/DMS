@@ -23,18 +23,28 @@
           <div class="card-body">
 
             <!-- Search Form -->
-            <form method="GET" action="/DeepSearch">
-              <div class="d-flex flex-wrap justify-content-between gap-3 mb-3">
-                <div class="search-bar">
-                  <span><i class="bx bx-search-alt"></i></span>
-                  <input
-                    type="search"
-                    class="form-control"
-                    name="keyword"
-                    value="<%= keyword || '' %>"
-                    placeholder="Search files & folders...">
+            <form method="GET" action="/DeepSearch" id="documentSearchForm" class="mb-4">
+              <input type="hidden" name="searchMode" id="searchMode" value="quick">
+              <div class="document-search" id="documentSearch">
+                <div class="document-search__icon" aria-hidden="true">
+                  <i class="bx bx-search"></i>
                 </div>
+                <input
+                  type="search"
+                  class="document-search__input"
+                  name="keyword"
+                  value="<%= keyword || '' %>"
+                  aria-label="Search files and folders"
+                  placeholder="Search files / folders">
+                <select class="document-search__mode" id="documentSearchMode" aria-label="Search mode">
+                  <option value="quick" selected>Quick Search</option>
+                  <option value="advanced">Advanced Search</option>
+                </select>
               </div>
+              <p id="quickSearchHint" class="text-muted small mt-2 mb-0">Quick search is faster but may not search within document content.</p>
+              <p class="text-muted small mt-2 mb-0 d-none" id="advancedSearchHint">
+                Advanced search helps to search user with document content, but it may take longer time to fetch results. Please be patient while the search is in progress.
+              </p>
             </form>
 
             <!-- Search Results Table -->
@@ -86,5 +96,82 @@
     </div>
   </div>
 </div>
+
+<style>
+  .document-search {
+    align-items: center;
+    background: #fff;
+    border: 2px solid #b3b3b3;
+    border-radius: 10px;
+    display: flex;
+    min-height: 60px;
+    padding: 8px 14px;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+
+  .document-search:focus-within {
+    border-color: #6c757d;
+    box-shadow: 0 0 0 .2rem rgba(108, 117, 125, .12);
+  }
+
+  .document-search__icon {
+    color: #8a8a8a;
+    font-size: 24px;
+    line-height: 1;
+    margin: 0 14px 0 2px;
+  }
+
+  .document-search__input {
+    background: transparent;
+    border: 0;
+    color: #4b4b4b;
+    flex: 1;
+    font-size: clamp(1rem, 1.5vw, 1rem);
+    min-width: 0;
+    outline: 0;
+  }
+
+  .document-search__input::placeholder { color: #858585; opacity: 1; }
+
+  .document-search__mode {
+    appearance: auto;
+    background: #f5f5f5;
+    border: 0;
+    border-radius: 999px;
+    color: #6c6c6c;
+    cursor: pointer;
+    font-size: .9rem;
+    margin-left: 12px;
+    padding: 8px 14px;
+    width: 155px;
+  }
+
+  @media (max-width: 575.98px) {
+    .document-search { flex-wrap: wrap; min-height: auto; }
+    .document-search__icon { font-size: 24px; margin-right: 10px; }
+    .document-search__input { font-size: 1rem; }
+    .document-search__mode { margin: 10px 0 0 34px; width: calc(100% - 34px); }
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const mode = document.getElementById("documentSearchMode");
+    const modeInput = document.getElementById("searchMode");
+    const input = document.querySelector(".document-search__input");
+    const quickHint = document.getElementById("quickSearchHint");
+    const advancedHint = document.getElementById("advancedSearchHint");
+
+    mode.addEventListener("change", function () {
+      const isQuickSearch = mode.value === "quick";
+      modeInput.value = mode.value;
+      quickHint.classList.toggle("d-none", !isQuickSearch);
+      advancedHint.classList.toggle("d-none", isQuickSearch);
+      input.placeholder = isQuickSearch ? "Search files / folders" : "Advanced Search";
+      input.setAttribute("aria-label", isQuickSearch ? "Search files and folders" : "Advanced search");
+      input.focus();
+    });
+  });
+</script>
 
 <%- include("./Layouts/footer") %>

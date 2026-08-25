@@ -19,7 +19,7 @@
           },
 
           menu: {
-               size: "sm-hover-active",   // [ 'default', 'sm-hover-active', 'sm-hover-active', 'condensed', 'full']
+               size: "default",           // [ 'default', 'sm-hover', 'sm-hover-active', 'condensed', 'hidden']
                color: "light",            // ['light', 'dark']
           },
      };
@@ -39,6 +39,13 @@
           config = JSON.parse(savedConfig);
      }
 
+     // Older sessions used hover-based menu modes. They conflict with the
+     // hamburger's explicit full/condensed toggle, so migrate them once.
+     if (config.menu.size === "sm-hover" || config.menu.size === "sm-hover-active") {
+          config.menu.size = "default";
+          sessionStorage.setItem("__VENTON_CONFIG__", JSON.stringify(config));
+     }
+
      window.config = config;
 
      if (config) {
@@ -46,7 +53,7 @@
           html.setAttribute("data-topbar-color", config.topbar.color);
           html.setAttribute("data-menu-color", config.menu.color);
 
-          if (window.innerWidth <= 1140) {
+          if (window.innerWidth <= 768) {
                html.setAttribute("data-menu-size", "hidden");
           } else {
                html.setAttribute("data-menu-size", config.menu.size);

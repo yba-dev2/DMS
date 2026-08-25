@@ -11,6 +11,7 @@ const searchController = require("../controllers/searchController");
 const CommitteeController = require("../controllers/Committe");
 const loginController = require("../controllers/login");
 const verifyTokenController = require("../controllers/api/verifyToken")
+const profileController = require("../controllers/profile");
 
 router.use(express.json())
 router.use(session({
@@ -29,6 +30,7 @@ let routes = app => {
   //Auth 
   router.get("/Uploads", requireAuth, homeController.getHome); 
   router.get('/welcome', homeController.getWelcome);
+  router.get('/profile', requireAuth, profileController.getProfile);
   router.post("/multiple-upload", requireAuth, uploadController.multipleUpload);
   // router.get('/',requireAuth, uploadController.getScan)
   router.get('/folder/:folderId',requireAuth, uploadController.getFolderContents)

@@ -876,21 +876,23 @@ class ThemeLayout {
           var menuToggleBtn = document.querySelector('.button-toggle-menu');
           if (menuToggleBtn) {
                menuToggleBtn.addEventListener('click', function () {
-                    var configSize = self.config.menu.size;
-                    var size = self.html.getAttribute('data-menu-size', configSize);
+                    var size = self.html.getAttribute('data-menu-size') || 'default';
 
-                    if (size !== 'hidden') {
-                         if (size === 'condensed') {
-                              self.changeMenuSize(configSize == 'condensed' ? 'default' : configSize, false);
-                         } else {
-                              self.changeMenuSize('condensed', false);
+                    // On smaller screens the sidebar remains an overlay. On desktop,
+                    // the same button switches between the full and icon-only rail.
+                    if (window.innerWidth <= 768 || size === 'hidden') {
+                         self.html.classList.toggle('sidebar-enable');
+                         if (self.html.classList.contains('sidebar-enable')) {
+                              self.showBackdrop();
                          }
-                    } else {
-                         self.showBackdrop();
+                         return;
                     }
 
-                    // Todo: old implementation
-                    self.html.classList.toggle('sidebar-enable');
+                    var isCondensed = size === 'condensed';
+                    // Persist the user's desktop menu choice across page navigation.
+                    self.changeMenuSize(isCondensed ? 'default' : 'condensed', true);
+                    self.html.classList.remove('sidebar-enable');
+                    menuToggleBtn.setAttribute('aria-expanded', String(isCondensed));
                });
           }
 
@@ -946,7 +948,7 @@ class ThemeLayout {
      _adjustLayout() {
           var self = this;
 
-          if (window.innerWidth <= 1140) {
+          if (window.innerWidth <= 768) {
                self.changeMenuSize('hidden', false);
           } else {
                self.changeMenuSize(self.config.menu.size);

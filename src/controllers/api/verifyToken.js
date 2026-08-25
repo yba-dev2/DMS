@@ -19,7 +19,7 @@ const verifyToken = async (req, res) => {
       employeeId,
       name: decoded.name,
       email: decoded.email,
-      employee_code: decoded.employee_code || decoded.employeeCode,
+      employeeCode: decoded.employee_code || decoded.employeeCode,
       department: decoded.department,
     };
     // Upsert user in MSSQL via Sequelize
